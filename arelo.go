@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/bmatcuk/doublestar"
@@ -17,14 +18,14 @@ import (
 
 var (
 	usage = `Usage: %s [OPTION]... -- COMMAND
-Run the COMMAND when a file matching the pattern has been modified.
+Run the COMMAND and restart when a file matches the pattern has been modified.
 
 Options:
 `
 	targets  = pflag.StringSliceP("target", "t", nil, "observation target `path`. (default \"./\")")
 	patterns = pflag.StringSliceP("pattern", "p", nil, "trigger pathname `glob` pattern. (required)")
 	ignores  = pflag.StringSliceP("ignore", "i", nil, "ignore pathname `glob` pattern.")
-	delay    = pflag.DurationP("delay", "d", time.Second, "`duration`")
+	delay    = pflag.DurationP("delay", "d", time.Second, "`duration` to delay the restart of the command.")
 	verbose  = pflag.BoolP("verbose", "v", false, "verbose output.")
 	help     = pflag.BoolP("help", "h", false, "show this document.")
 )
@@ -67,7 +68,7 @@ func main() {
 				log.Fatalf("wacher closed")
 				return
 			}
-			logVerbose("detect modified: %q", name)
+			log.Printf("modified: %q", name)
 			restartC <- struct{}{}
 		case err := <-errC:
 			log.Fatalf("wacher error: %v", err)
@@ -220,16 +221,25 @@ func addDirRecursive(w *fsnotify.Watcher, fi os.FileInfo, t string, ch chan<- st
 
 func runner(cmd []string, delay time.Duration) chan<- struct{} {
 	restart := make(chan struct{})
-	request := make(chan struct{}, 1)
+	trigger := make(chan struct{}, 1)
 
 	go func() {
 		for range restart {
 			select {
-			case request <- struct{}{}:
+			case trigger <- struct{}{}:
 			default:
 			}
 		}
 	}()
+
+	var pcmd string // command string for display.
+	for _, s := range cmd {
+		if strings.ContainsAny(s, " \t\"'") {
+			s = fmt.Sprintf("%q", s)
+		}
+		pcmd += " " + s
+	}
+	pcmd = pcmd[1:]
 
 	go func() {
 		for {
@@ -237,27 +247,27 @@ func runner(cmd []string, delay time.Duration) chan<- struct{} {
 			done := make(chan struct{})
 
 			go func() {
-				logVerbose("run command: %q", cmd)
+				log.Printf("start: %s", pcmd)
 				err := runCmd(cmd, stop)
 				if err != nil {
 					log.Printf("command error: %v", err)
 				} else {
-					logVerbose("command exit status 0")
+					log.Printf("command exit status 0")
 				}
 				close(done)
 			}()
 
-			// ignore request before the command start.
+			// ignore trigger before the command started.
 			select {
-			case <-request:
+			case <-trigger:
 			default:
 			}
 
-			<-request
-			close(stop)
+			<-trigger
 			logVerbose("wait %v", delay)
 			time.Sleep(delay)
-			<-done // wait process
+			close(stop)
+			<-done // wait process closed
 		}
 	}()
 
