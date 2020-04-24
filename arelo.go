@@ -17,14 +17,14 @@ import (
 
 var (
 	usage = `Usage: %s [OPTION]... -- COMMAND
-Run the COMMAND when a file matching the pattern is modified.
+Run the COMMAND when a file matching the pattern has been modified.
 
 Options:
 `
 	targets  = pflag.StringSliceP("target", "t", nil, "observation target `path`. (default \"./\")")
-	patterns = pflag.StringSliceP("pattern", "p", nil, "trigger pathname `glob` pattern.")
+	patterns = pflag.StringSliceP("pattern", "p", nil, "trigger pathname `glob` pattern. (required)")
 	ignores  = pflag.StringSliceP("ignore", "i", nil, "ignore pathname `glob` pattern.")
-	skip     = pflag.DurationP("skip", "s", time.Second, "`duration` to skip the trigger.")
+	delay    = pflag.DurationP("delay", "d", time.Second, "`duration`")
 	verbose  = pflag.BoolP("verbose", "v", false, "verbose output.")
 	help     = pflag.BoolP("help", "h", false, "show this document.")
 )
@@ -39,39 +39,36 @@ func main() {
 	logVerbose("targets:  %q", targets)
 	logVerbose("patterns: %q", patterns)
 	logVerbose("ignores:  %q", ignores)
-	logVerbose("skip:     %v", skip)
+	logVerbose("delay:    %v", delay)
 
+	if len(cmd) == 0 {
+		fmt.Fprintf(os.Stderr, "%s: COMMAND required.\n", os.Args[0])
+		*help = true
+	} else if len(*patterns) == 0 {
+		fmt.Fprintf(os.Stderr, "%s: pattern required.\n", os.Args[0])
+		*help = true
+	}
 	if *help {
-		fmt.Printf(usage, os.Args[0])
+		fmt.Fprintf(os.Stderr, usage, os.Args[0])
 		pflag.PrintDefaults()
 		return
 	}
 
-	modC, errC, err := watcher()
+	modC, errC, err := watcher(*targets, *ignores, *patterns, *delay)
 	if err != nil {
 		log.Fatalf("wacher error: %v", err)
 	}
-	for {
-		stop := make(chan struct{})
-		go func() {
-			logVerbose("run command: %q", cmd)
-			err := runCmd(cmd, stop)
-			if err != nil {
-				log.Printf("command error: %v", err)
-			} else {
-				logVerbose("command exit status 0")
-			}
-		}()
+	restartC := runner(cmd, *delay)
 
+	for {
 		select {
 		case name, ok := <-modC:
 			if !ok {
 				log.Fatalf("wacher closed")
 				return
 			}
-			logVerbose("detect modified: %v", name)
-			close(stop)
-			continue
+			logVerbose("detect modified: %q", name)
+			restartC <- struct{}{}
 		case err := <-errC:
 			log.Fatalf("wacher error: %v", err)
 			return
@@ -85,13 +82,13 @@ func logVerbose(fmt string, args ...interface{}) {
 	}
 }
 
-func watcher() (<-chan string, <-chan error, error) {
+func watcher(targets, ignores, patterns []string, skip time.Duration) (<-chan string, <-chan error, error) {
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	for _, t := range *targets {
+	for _, t := range targets {
 		err := addTarget(w, t)
 		if err != nil {
 			return nil, nil, err
@@ -103,7 +100,7 @@ func watcher() (<-chan string, <-chan error, error) {
 
 	go func() {
 		defer close(modC)
-		next := time.Now().Add(*skip)
+		next := time.Now().Add(skip)
 		for {
 			select {
 			case event, ok := <-w.Events:
@@ -114,19 +111,21 @@ func watcher() (<-chan string, <-chan error, error) {
 
 				name := event.Name
 
-				if ignore, err := matchPatterns(name, *ignores); err != nil {
+				if ignore, err := matchPatterns(name, ignores); err != nil {
 					errC <- xerrors.Errorf("ignore match error: %w", err)
 					return
 				} else if ignore {
 					continue
 				}
 
-				if match, err := matchPatterns(name, *patterns); err != nil {
-					errC <- xerrors.Errorf("pattern match error: %w", err)
-					return
-				} else if match && time.Now().After(next) {
-					modC <- name
-					next = time.Now().Add(*skip)
+				if time.Now().After(next) {
+					if match, err := matchPatterns(name, patterns); err != nil {
+						errC <- xerrors.Errorf("pattern match error: %w", err)
+						return
+					} else if match {
+						modC <- name
+						next = time.Now().Add(skip)
+					}
 				}
 
 				// add watcher if new directory.
@@ -217,6 +216,52 @@ func addDirRecursive(w *fsnotify.Watcher, fi os.FileInfo, t string, ch chan<- st
 		}
 	}
 	return nil
+}
+
+func runner(cmd []string, delay time.Duration) chan<- struct{} {
+	restart := make(chan struct{})
+	request := make(chan struct{}, 1)
+
+	go func() {
+		for range restart {
+			select {
+			case request <- struct{}{}:
+			default:
+			}
+		}
+	}()
+
+	go func() {
+		for {
+			stop := make(chan struct{})
+			done := make(chan struct{})
+
+			go func() {
+				logVerbose("run command: %q", cmd)
+				err := runCmd(cmd, stop)
+				if err != nil {
+					log.Printf("command error: %v", err)
+				} else {
+					logVerbose("command exit status 0")
+				}
+				close(done)
+			}()
+
+			// ignore request before the command start.
+			select {
+			case <-request:
+			default:
+			}
+
+			<-request
+			close(stop)
+			logVerbose("wait %v", delay)
+			time.Sleep(delay)
+			<-done // wait process
+		}
+	}()
+
+	return restart
 }
 
 func runCmd(cmd []string, stop <-chan struct{}) error {
