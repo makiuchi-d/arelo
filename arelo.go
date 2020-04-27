@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/bmatcuk/doublestar"
@@ -278,6 +279,7 @@ func runCmd(cmd []string, stop <-chan struct{}) error {
 	c := exec.Command(cmd[0], cmd[1:]...)
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
+	c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := c.Start(); err != nil {
 		return err
 	}
@@ -288,7 +290,7 @@ func runCmd(cmd []string, stop <-chan struct{}) error {
 
 	select {
 	case <-stop:
-		err := c.Process.Kill()
+		err := syscall.Kill(-c.Process.Pid, syscall.SIGKILL)
 		if err != nil {
 			return xerrors.Errorf("kill error: %w", err)
 		}
