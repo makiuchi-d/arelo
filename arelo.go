@@ -43,12 +43,14 @@ func main() {
 	logVerbose("ignores:  %q", ignores)
 	logVerbose("delay:    %v", delay)
 
-	if len(cmd) == 0 {
-		fmt.Fprintf(os.Stderr, "%s: COMMAND required.\n", os.Args[0])
-		*help = true
-	} else if len(*patterns) == 0 {
-		fmt.Fprintf(os.Stderr, "%s: pattern required.\n", os.Args[0])
-		*help = true
+	if !*help {
+		if len(cmd) == 0 {
+			fmt.Fprintf(os.Stderr, "%s: COMMAND required.\n", os.Args[0])
+			*help = true
+		} else if len(*patterns) == 0 {
+			fmt.Fprintf(os.Stderr, "%s: pattern required.\n", os.Args[0])
+			*help = true
+		}
 	}
 	if *help {
 		fmt.Fprintf(os.Stderr, usage, os.Args[0])
