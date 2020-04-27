@@ -58,7 +58,7 @@ func main() {
 
 	modC, errC, err := watcher(*targets, *ignores, *patterns, *delay)
 	if err != nil {
-		log.Fatalf("wacher error: %v", err)
+		log.Fatalf("[ARELO] wacher error: %v", err)
 	}
 	restartC := runner(cmd, *delay)
 
@@ -66,13 +66,13 @@ func main() {
 		select {
 		case name, ok := <-modC:
 			if !ok {
-				log.Fatalf("wacher closed")
+				log.Fatalf("[ARELO] wacher closed")
 				return
 			}
-			log.Printf("modified: %q", name)
+			log.Printf("[ARELO] modified: %q", name)
 			restartC <- struct{}{}
 		case err := <-errC:
-			log.Fatalf("wacher error: %v", err)
+			log.Fatalf("[ARELO] wacher error: %v", err)
 			return
 		}
 	}
@@ -80,7 +80,7 @@ func main() {
 
 func logVerbose(fmt string, args ...interface{}) {
 	if *verbose {
-		log.Printf(fmt, args...)
+		log.Printf("[ARELO] "+fmt, args...)
 	}
 }
 
@@ -182,7 +182,7 @@ func addTarget(w *fsnotify.Watcher, t string) error {
 	if fi.IsDir() {
 		return addDirRecursive(w, fi, t, nil)
 	}
-	logVerbose("watching target: %q", t)
+	logVerbose("[ARELO] watching target: %q", t)
 	return w.Add(t)
 }
 
@@ -248,12 +248,12 @@ func runner(cmd []string, delay time.Duration) chan<- struct{} {
 			done := make(chan struct{})
 
 			go func() {
-				log.Printf("start: %s", pcmd)
+				log.Printf("[ARELO] start: %s", pcmd)
 				err := runCmd(cmd, stop)
 				if err != nil {
-					log.Printf("command error: %v", err)
+					log.Printf("[ARELO] command error: %v", err)
 				} else {
-					log.Printf("command exit status 0")
+					log.Printf("[ARELO] command exit status 0")
 				}
 				close(done)
 			}()
