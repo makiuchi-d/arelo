@@ -91,7 +91,7 @@ Monitor files under the ./src or ./html directories.
 
 #### `-p '**/*.{go,html,yaml}'`
 
-Restart command when any *.go, *.html, *.yml file under the current and sub, subsub, ... directories modified.
+Restart command when any *.go, *.html, *.yml file under the target, sub, and subsub... directories modified.
 
 #### `-i '**/.*'`
 
