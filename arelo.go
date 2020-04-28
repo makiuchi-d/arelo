@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -62,22 +65,38 @@ func main() {
 	if err != nil {
 		log.Fatalf("[ARELO] wacher error: %v", err)
 	}
-	restartC := runner(cmd, *delay)
 
-	for {
-		select {
-		case name, ok := <-modC:
-			if !ok {
-				log.Fatalf("[ARELO] wacher closed")
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	restartC := runner(ctx, &wg, cmd, *delay)
+
+	go func() {
+		for {
+			select {
+			case name, ok := <-modC:
+				if !ok {
+					cancel()
+					wg.Wait()
+					log.Fatalf("[ARELO] wacher closed")
+					return
+				}
+				log.Printf("[ARELO] modified: %q", name)
+				restartC <- struct{}{}
+			case err := <-errC:
+				cancel()
+				wg.Wait()
+				log.Fatalf("[ARELO] wacher error: %v", err)
 				return
 			}
-			log.Printf("[ARELO] modified: %q", name)
-			restartC <- struct{}{}
-		case err := <-errC:
-			log.Fatalf("[ARELO] wacher error: %v", err)
-			return
 		}
-	}
+	}()
+
+	s := make(chan os.Signal)
+	signal.Notify(s, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
+	sig := <-s
+	log.Printf("[ARELO] signal: %v", sig)
+	cancel()
+	wg.Wait()
 }
 
 func logVerbose(fmt string, args ...interface{}) {
@@ -221,7 +240,7 @@ func addDirRecursive(w *fsnotify.Watcher, fi os.FileInfo, t string, ch chan<- st
 	return nil
 }
 
-func runner(cmd []string, delay time.Duration) chan<- struct{} {
+func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Duration) chan<- struct{} {
 	restart := make(chan struct{})
 	trigger := make(chan struct{}, 1)
 
@@ -243,14 +262,21 @@ func runner(cmd []string, delay time.Duration) chan<- struct{} {
 	}
 	pcmd = pcmd[1:]
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for {
-			stop := make(chan struct{})
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			ctx, cancel := context.WithCancel(ctx)
 			done := make(chan struct{})
 
 			go func() {
 				log.Printf("[ARELO] start: %s", pcmd)
-				err := runCmd(cmd, stop)
+				err := runCmd(ctx, cmd)
 				if err != nil {
 					log.Printf("[ARELO] command error: %v", err)
 				} else {
@@ -265,10 +291,24 @@ func runner(cmd []string, delay time.Duration) chan<- struct{} {
 			default:
 			}
 
-			<-trigger
+			select {
+			case <-ctx.Done():
+				cancel()
+				<-done
+				return
+			case <-trigger:
+			}
+
 			logVerbose("wait %v", delay)
-			time.Sleep(delay)
-			close(stop)
+			t := time.NewTimer(delay)
+			select {
+			case <-ctx.Done():
+				cancel()
+				<-done
+				return
+			case <-t.C:
+			}
+			cancel()
 			<-done // wait process closed
 		}
 	}()
@@ -276,7 +316,7 @@ func runner(cmd []string, delay time.Duration) chan<- struct{} {
 	return restart
 }
 
-func runCmd(cmd []string, stop <-chan struct{}) error {
+func runCmd(ctx context.Context, cmd []string) error {
 	c := exec.Command(cmd[0], cmd[1:]...)
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
@@ -290,12 +330,12 @@ func runCmd(cmd []string, stop <-chan struct{}) error {
 	}()
 
 	select {
-	case <-stop:
+	case <-ctx.Done():
 		err := syscall.Kill(-c.Process.Pid, syscall.SIGKILL)
 		if err != nil {
 			return xerrors.Errorf("kill error: %w", err)
 		}
-		return xerrors.New("process killed")
+		return xerrors.Errorf("process canceled: %w", <-done)
 	case err := <-done:
 		if err != nil {
 			err = xerrors.Errorf("process exit: %w", err)
