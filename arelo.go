@@ -136,10 +136,9 @@ func watcher(targets, ignores, patterns []string, skip time.Duration) (<-chan st
 				if event.Op == fsnotify.Create {
 					fi, err := os.Stat(name)
 					if err != nil {
-						errC <- err
-						return
-					}
-					if fi.IsDir() {
+						// ignore stat errors (notfound, permission, etc.)
+						log.Printf("watcher: %v", err)
+					} else if fi.IsDir() {
 						err := addDirRecursive(w, fi, name, modC)
 						if err != nil {
 							errC <- err
