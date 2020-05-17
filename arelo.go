@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path"
 	"strings"
@@ -317,10 +316,9 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 }
 
 func runCmd(ctx context.Context, cmd []string) error {
-	c := exec.Command(cmd[0], cmd[1:]...)
+	c := prepareCommand(cmd)
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
-	c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := c.Start(); err != nil {
 		return err
 	}
@@ -331,7 +329,7 @@ func runCmd(ctx context.Context, cmd []string) error {
 
 	select {
 	case <-ctx.Done():
-		err := syscall.Kill(-c.Process.Pid, syscall.SIGTERM)
+		err := killChilds(c)
 		if err != nil {
 			return xerrors.Errorf("kill error: %w", err)
 		}
