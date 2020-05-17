@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -131,7 +132,7 @@ func watcher(targets, ignores, patterns []string, skip time.Duration) (<-chan st
 					return
 				}
 
-				name := event.Name
+				name := filepath.ToSlash(event.Name)
 
 				if ignore, err := matchPatterns(name, ignores); err != nil {
 					errC <- xerrors.Errorf("ignore match error: %w", err)
