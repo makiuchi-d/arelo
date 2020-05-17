@@ -331,7 +331,7 @@ func runCmd(ctx context.Context, cmd []string) error {
 
 	select {
 	case <-ctx.Done():
-		err := syscall.Kill(-c.Process.Pid, syscall.SIGKILL)
+		err := syscall.Kill(-c.Process.Pid, syscall.SIGTERM)
 		if err != nil {
 			return xerrors.Errorf("kill error: %w", err)
 		}
