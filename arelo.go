@@ -73,6 +73,8 @@ func main() {
 	go func() {
 		for {
 			select {
+			case <-ctx.Done():
+				return
 			case name, ok := <-modC:
 				if !ok {
 					cancel()
