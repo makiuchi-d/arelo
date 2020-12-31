@@ -13,6 +13,6 @@ func prepareCommand(cmd []string) *exec.Cmd {
 	return c
 }
 
-func killChilds(c *exec.Cmd) error {
-	return syscall.Kill(-c.Process.Pid, syscall.SIGTERM)
+func killChilds(c *exec.Cmd, sig syscall.Signal) error {
+	return syscall.Kill(-c.Process.Pid, sig)
 }
