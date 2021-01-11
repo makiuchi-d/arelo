@@ -30,6 +30,7 @@ Options:
   -h, --help             show this document.
   -i, --ignore glob      ignore pathname glob pattern.
   -p, --pattern glob     trigger pathname glob pattern. (required)
+  -s, --signal signal    signal to stop the command. (default "SIGTERM")
   -t, --target path      observation target path. (default "./")
   -v, --verbose          verbose output.
 ```
@@ -70,6 +71,15 @@ Delay the restart of the command from the detection of the pattern matched file 
 The detections within the delay are ignored.
 
 The duration is specified as a number with a unit suffix ("ns", "us" (or "µs"), "ms", "s", "m", "h").
+
+### -s, --signal signal
+
+This signal will be sent to stop the command on restart.
+The default signal is `SIGTERM`.
+
+This option can be `SIGHUP`, `SIGINT`, `SIGKILL`, `SIGUSR1`, `SIGUSR2`, or `SIGTERM`.
+
+This options has no effect on Windows.
 
 #### -v, --verbose
 

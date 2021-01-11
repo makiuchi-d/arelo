@@ -30,6 +30,7 @@ Options:
 	patterns = pflag.StringSliceP("pattern", "p", nil, "trigger pathname `glob` pattern. (required)")
 	ignores  = pflag.StringSliceP("ignore", "i", nil, "ignore pathname `glob` pattern.")
 	delay    = pflag.DurationP("delay", "d", time.Second, "`duration` to delay the restart of the command.")
+	sigstr   = pflag.StringP("signal", "s", "SIGTERM", "`signal` to stop the command.")
 	verbose  = pflag.BoolP("verbose", "v", false, "verbose output.")
 	help     = pflag.BoolP("help", "h", false, "show this document.")
 )
@@ -40,11 +41,13 @@ func main() {
 	if *targets == nil {
 		*targets = []string{"./"}
 	}
+	sig, sigstr := parseSignalOption(*sigstr)
 	logVerbose("command:  %q", cmd)
-	logVerbose("targets:  %q", targets)
-	logVerbose("patterns: %q", patterns)
-	logVerbose("ignores:  %q", ignores)
+	logVerbose("targets:  %q", *targets)
+	logVerbose("patterns: %q", *patterns)
+	logVerbose("ignores:  %q", *ignores)
 	logVerbose("delay:    %v", delay)
+	logVerbose("signal:   %s", sigstr)
 
 	if !*help {
 		if len(cmd) == 0 {
@@ -52,6 +55,9 @@ func main() {
 			*help = true
 		} else if len(*patterns) == 0 {
 			fmt.Fprintf(os.Stderr, "%s: pattern required.\n", os.Args[0])
+			*help = true
+		} else if sig == nil {
+			fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], sigstr)
 			*help = true
 		}
 	}
@@ -68,7 +74,7 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
-	restartC := runner(ctx, &wg, cmd, *delay)
+	restartC := runner(ctx, &wg, cmd, *delay, sig.(syscall.Signal))
 
 	go func() {
 		for {
@@ -95,7 +101,7 @@ func main() {
 
 	s := make(chan os.Signal, 1)
 	signal.Notify(s, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
-	sig := <-s
+	sig = <-s
 	log.Printf("[ARELO] signal: %v", sig)
 	cancel()
 	wg.Wait()
@@ -242,7 +248,7 @@ func addDirRecursive(w *fsnotify.Watcher, fi os.FileInfo, t string, ch chan<- st
 	return nil
 }
 
-func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Duration) chan<- struct{} {
+func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Duration, sig syscall.Signal) chan<- struct{} {
 	restart := make(chan struct{})
 	trigger := make(chan struct{}, 1)
 
@@ -278,7 +284,7 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 
 			go func() {
 				log.Printf("[ARELO] start: %s", pcmd)
-				err := runCmd(ctx, cmd)
+				err := runCmd(ctx, cmd, sig)
 				if err != nil {
 					log.Printf("[ARELO] command error: %v", err)
 				} else {
@@ -318,7 +324,7 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 	return restart
 }
 
-func runCmd(ctx context.Context, cmd []string) error {
+func runCmd(ctx context.Context, cmd []string, sig syscall.Signal) error {
 	c := prepareCommand(cmd)
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
@@ -332,7 +338,7 @@ func runCmd(ctx context.Context, cmd []string) error {
 
 	select {
 	case <-ctx.Done():
-		err := killChilds(c)
+		err := killChilds(c, sig)
 		if err != nil {
 			return xerrors.Errorf("kill error: %w", err)
 		}
