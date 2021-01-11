@@ -20,6 +20,10 @@ import (
 	"golang.org/x/xerrors"
 )
 
+const (
+	waitForTerm = 5 * time.Second
+)
+
 var (
 	usage = `Usage: %s [OPTION]... -- COMMAND
 Run the COMMAND and restart when a file matches the pattern has been modified.
@@ -331,22 +335,36 @@ func runCmd(ctx context.Context, cmd []string, sig syscall.Signal) error {
 	if err := c.Start(); err != nil {
 		return err
 	}
-	done := make(chan error)
+
+	var cerr error
+	done := make(chan struct{})
 	go func() {
-		done <- c.Wait()
+		cerr = c.Wait()
+		close(done)
 	}()
 
 	select {
+	case <-done:
+		if cerr != nil {
+			cerr = xerrors.Errorf("process exit: %w", cerr)
+		}
+		return cerr
 	case <-ctx.Done():
-		err := killChilds(c, sig)
-		if err != nil {
-			return xerrors.Errorf("kill error: %w", err)
-		}
-		return xerrors.Errorf("process canceled: %w", <-done)
-	case err := <-done:
-		if err != nil {
-			err = xerrors.Errorf("process exit: %w", err)
-		}
-		return err
 	}
+
+	if err := killChilds(c, sig); err != nil {
+		return xerrors.Errorf("kill error: %w", err)
+	}
+
+	t := time.NewTimer(waitForTerm)
+	select {
+	case <-t.C:
+		if err := killChilds(c, syscall.SIGKILL); err != nil {
+			return xerrors.Errorf("kill (SIGKILL) error %w", err)
+		}
+		<-done
+	case <-done:
+	}
+
+	return xerrors.Errorf("process canceled: %w", cerr)
 }
