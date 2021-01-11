@@ -19,6 +19,8 @@ When the file that matches the pattern has been modified, restart the command.
 go get github.com/makiuchi-d/arelo
 ```
 
+Or, you can download the executable binaries from the [release page](https://github.com/makiuchi-d/arelo/releases).
+
 ## Usage
 
 ```
