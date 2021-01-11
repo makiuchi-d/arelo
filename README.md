@@ -81,7 +81,7 @@ The default signal is `SIGTERM`.
 
 This option can be `SIGHUP`, `SIGINT`, `SIGKILL`, `SIGUSR1`, `SIGUSR2`, or `SIGTERM`.
 
-This options has no effect on Windows.
+This option is not available on Windows.
 
 #### -v, --verbose
 
