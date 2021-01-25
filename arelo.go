@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	versionStr  = "arelo version 1.6.0"
+	version     = "(develop)"
 	waitForTerm = 5 * time.Second
 )
 
@@ -38,13 +38,13 @@ Options:
 	sigstr   = pflag.StringP("signal", "s", "SIGTERM", "`signal` to stop the command.")
 	verbose  = pflag.BoolP("verbose", "v", false, "verbose output.")
 	help     = pflag.BoolP("help", "h", false, "show this document.")
-	version  = pflag.BoolP("version", "V", false, "show version.")
+	showver  = pflag.BoolP("version", "V", false, "show version.")
 )
 
 func main() {
 	pflag.Parse()
-	if *version {
-		fmt.Println(versionStr)
+	if *showver {
+		fmt.Println("arelo version", version)
 		return
 	}
 	cmd := pflag.Args()
@@ -72,7 +72,7 @@ func main() {
 		}
 	}
 	if *help {
-		fmt.Println(versionStr)
+		fmt.Println("arelo version", version)
 		fmt.Fprintf(os.Stderr, usage, os.Args[0])
 		pflag.PrintDefaults()
 		return
