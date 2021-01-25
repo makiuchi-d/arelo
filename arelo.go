@@ -356,9 +356,8 @@ func runCmd(ctx context.Context, cmd []string, sig syscall.Signal) error {
 		return xerrors.Errorf("kill error: %w", err)
 	}
 
-	t := time.NewTimer(waitForTerm)
 	select {
-	case <-t.C:
+	case <-time.NewTimer(waitForTerm).C:
 		if err := killChilds(c, syscall.SIGKILL); err != nil {
 			return xerrors.Errorf("kill (SIGKILL) error %w", err)
 		}

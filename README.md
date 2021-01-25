@@ -111,9 +111,10 @@ Ignore files/directories whose name starts with '.'.
 
 Command to run.
 
-## Referenced project
+## Referenced projects
 
  - [realize](https://github.com/oxequa/realize)
  - [fresh](https://github.com/gravityblast/fresh)
  - [gin](https://github.com/codegangsta/gin)
  - [go-task](https://github.com/go-task/task)
+ - [air](https://github.com/cosmtrek/air)
