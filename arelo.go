@@ -21,12 +21,12 @@ import (
 )
 
 const (
-	version     = "(develop)"
 	waitForTerm = 5 * time.Second
 )
 
 var (
-	usage = `Usage: %s [OPTION]... -- COMMAND
+	version string
+	usage   = `Usage: %s [OPTION]... -- COMMAND
 Run the COMMAND and restart when a file matches the pattern has been modified.
 
 Options:
