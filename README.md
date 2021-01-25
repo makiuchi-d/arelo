@@ -35,6 +35,7 @@ Options:
   -s, --signal signal    signal to stop the command. (default "SIGTERM")
   -t, --target path      observation target path. (default "./")
   -v, --verbose          verbose output.
+  -V, --version          show version.
 ```
 
 ### Options
