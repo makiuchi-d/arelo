@@ -26,7 +26,7 @@ const (
 )
 
 var (
-	version = "(devel)"
+	version string
 	usage   = `Usage: %s [OPTION]... -- COMMAND
 Run the COMMAND and restart when a file matches the pattern has been modified.
 
@@ -126,9 +126,12 @@ func logVerbose(fmt string, args ...interface{}) {
 }
 
 func Version() string {
+	if version != "" {
+		return version
+	}
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		return version
+		return "(devel)"
 	}
 	return info.Main.Version
 }
