@@ -16,7 +16,7 @@ When the file that matches the pattern has been modified, restart the command.
 ## Install
 
 ```
-go get github.com/makiuchi-d/arelo
+go install github.com/makiuchi-d/arelo@latest
 ```
 
 Or, you can download the executable binaries from the [release page](https://github.com/makiuchi-d/arelo/releases).
@@ -114,7 +114,7 @@ Ignore files/directories whose name starts with '.'.
 
 Command to run.
 
-## Referenced projects
+## Similar projects
 
  - [realize](https://github.com/oxequa/realize)
  - [fresh](https://github.com/gravityblast/fresh)
