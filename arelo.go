@@ -183,7 +183,7 @@ func watcher(targets, ignores, patterns []string, skip time.Duration) (<-chan st
 				}
 
 				// add watcher if new directory.
-				if event.Op == fsnotify.Create {
+				if event.Op&fsnotify.Create == fsnotify.Create {
 					fi, err := os.Stat(name)
 					if err != nil {
 						// ignore stat errors (notfound, permission, etc.)
