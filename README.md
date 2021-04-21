@@ -21,6 +21,8 @@ go install github.com/makiuchi-d/arelo@latest
 
 Or, you can download the executable binaries from the [release page](https://github.com/makiuchi-d/arelo/releases).
 
+To get a static-linked executable binary, build with `CGO_ENABLED=0`.
+
 ## Usage
 
 ```
@@ -31,7 +33,7 @@ Options:
   -d, --delay duration   duration to delay the restart of the command. (default 1s)
   -h, --help             show this document.
   -i, --ignore glob      ignore pathname glob pattern.
-  -p, --pattern glob     trigger pathname glob pattern. (required)
+  -p, --pattern glob     trigger pathname glob pattern. (default "**")
   -s, --signal signal    signal to stop the command. (default "SIGTERM")
   -t, --target path      observation target path. (default "./")
   -v, --verbose          verbose output.
@@ -47,6 +49,8 @@ The subdirectories are also monitored unless they match to the ignore patterns.
 
 This option can be set multiple times.
 
+The default value is the current directory ("./").
+
 Note:
 This option can be file instead of directory, 
 but arelo cannot follow modification after the file has been removed/renamed.
@@ -58,6 +62,8 @@ The pattern is specified as an extended glob
 that supports `{alt1,...}`, `**` like zsh or bash with globstar option.
 
 This option can set multiple times.
+
+The default value ("**") is a pattern that matches any file in the target directories and their subdirectories.
 
 #### -i, --ignore glob
 

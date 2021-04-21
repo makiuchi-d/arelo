@@ -33,7 +33,7 @@ Run the COMMAND and restart when a file matches the pattern has been modified.
 Options:
 `
 	targets  = pflag.StringSliceP("target", "t", nil, "observation target `path`. (default \"./\")")
-	patterns = pflag.StringSliceP("pattern", "p", nil, "trigger pathname `glob` pattern. (required)")
+	patterns = pflag.StringSliceP("pattern", "p", nil, "trigger pathname `glob` pattern. (default \"**\")")
 	ignores  = pflag.StringSliceP("ignore", "i", nil, "ignore pathname `glob` pattern.")
 	delay    = pflag.DurationP("delay", "d", time.Second, "`duration` to delay the restart of the command.")
 	sigstr   = pflag.StringP("signal", "s", "SIGTERM", "`signal` to stop the command.")
@@ -52,6 +52,10 @@ func main() {
 	if *targets == nil {
 		*targets = []string{"./"}
 	}
+	if *patterns == nil {
+		logVerbose("patterns nil")
+		*patterns = []string{"**"}
+	}
 	sig, sigstr := parseSignalOption(*sigstr)
 	logVerbose("command:  %q", cmd)
 	logVerbose("targets:  %q", *targets)
@@ -63,9 +67,6 @@ func main() {
 	if !*help {
 		if len(cmd) == 0 {
 			fmt.Fprintf(os.Stderr, "%s: COMMAND required.\n", os.Args[0])
-			*help = true
-		} else if len(*patterns) == 0 {
-			fmt.Fprintf(os.Stderr, "%s: pattern required.\n", os.Args[0])
 			*help = true
 		} else if sig == nil {
 			fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], sigstr)
