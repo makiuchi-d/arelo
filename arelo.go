@@ -80,7 +80,7 @@ func main() {
 		return
 	}
 
-	modC, errC, err := watcher(*targets, *ignores, *patterns, *delay)
+	modC, errC, err := watcher(*targets, *patterns, *ignores, *delay)
 	if err != nil {
 		log.Fatalf("[ARELO] wacher error: %v", err)
 	}
@@ -137,14 +137,14 @@ func Version() string {
 	return info.Main.Version
 }
 
-func watcher(targets, ignores, patterns []string, skip time.Duration) (<-chan string, <-chan error, error) {
+func watcher(targets, patterns, ignores []string, skip time.Duration) (<-chan string, <-chan error, error) {
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, nil, err
 	}
 
 	for _, t := range targets {
-		err := addTarget(w, t)
+		err := addTarget(w, t, patterns, ignores)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -190,7 +190,7 @@ func watcher(targets, ignores, patterns []string, skip time.Duration) (<-chan st
 						// ignore stat errors (notfound, permission, etc.)
 						log.Printf("watcher: %v", err)
 					} else if fi.IsDir() {
-						err := addDirRecursive(w, fi, name, modC)
+						err := addDirRecursive(w, fi, name, patterns, ignores, modC)
 						if err != nil {
 							errC <- err
 							return
@@ -225,20 +225,20 @@ func matchPatterns(t string, pats []string) (bool, error) {
 	return false, nil
 }
 
-func addTarget(w *fsnotify.Watcher, t string) error {
+func addTarget(w *fsnotify.Watcher, t string, patterns, ignores []string) error {
 	t = path.Clean(t)
 	fi, err := os.Stat(t)
 	if err != nil {
 		return xerrors.Errorf("stat: %w", err)
 	}
 	if fi.IsDir() {
-		return addDirRecursive(w, fi, t, nil)
+		return addDirRecursive(w, fi, t, patterns, ignores, nil)
 	}
 	logVerbose("[ARELO] watching target: %q", t)
 	return w.Add(t)
 }
 
-func addDirRecursive(w *fsnotify.Watcher, fi os.FileInfo, t string, ch chan<- string) error {
+func addDirRecursive(w *fsnotify.Watcher, fi os.FileInfo, t string, patterns, ignores []string, ch chan<- string) error {
 	logVerbose("watching target: %q", t)
 	err := w.Add(t)
 	if err != nil {
@@ -250,20 +250,20 @@ func addDirRecursive(w *fsnotify.Watcher, fi os.FileInfo, t string, ch chan<- st
 	}
 	for _, fi := range fis {
 		name := path.Join(t, fi.Name())
-		if ignore, err := matchPatterns(name, *ignores); err != nil {
+		if ignore, err := matchPatterns(name, ignores); err != nil {
 			return xerrors.Errorf("ignore match error: %w", err)
 		} else if ignore {
 			continue
 		}
 		if ch != nil {
-			if match, err := matchPatterns(name, *patterns); err != nil {
+			if match, err := matchPatterns(name, patterns); err != nil {
 				return xerrors.Errorf("pattern match error: %w", err)
 			} else if match {
 				ch <- name
 			}
 		}
 		if fi.IsDir() {
-			err := addDirRecursive(w, fi, name, ch)
+			err := addDirRecursive(w, fi, name, patterns, ignores, ch)
 			if err != nil {
 				return err
 			}
