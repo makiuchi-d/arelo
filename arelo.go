@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bmatcuk/doublestar"
+	"github.com/bmatcuk/doublestar/v4"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/pflag"
 	"golang.org/x/xerrors"
