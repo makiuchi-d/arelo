@@ -87,7 +87,7 @@ The duration is specified as a number with a unit suffix ("ns", "us" (or "µs"),
 This signal will be sent to stop the command on restart.
 The default signal is `SIGTERM`.
 
-This option can be `SIGHUP`, `SIGINT`, `SIGKILL`, `SIGUSR1`, `SIGUSR2`, or `SIGTERM`.
+This option can be `SIGHUP`, `SIGINT`, `SIGQUIT`, `SIGKILL`, `SIGUSR1`, `SIGUSR2`, `SIGWINCH` or `SIGTERM`.
 
 This option is not available on Windows.
 
