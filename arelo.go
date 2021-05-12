@@ -32,9 +32,9 @@ Run the COMMAND and restart when a file matches the pattern has been modified.
 
 Options:
 `
-	targets  = pflag.StringSliceP("target", "t", nil, "observation target `path`. (default \"./\")")
-	patterns = pflag.StringSliceP("pattern", "p", nil, "trigger pathname `glob` pattern. (default \"**\")")
-	ignores  = pflag.StringSliceP("ignore", "i", nil, "ignore pathname `glob` pattern.")
+	targets  = pflag.StringArrayP("target", "t", nil, "observation target `path`. (default \"./\")")
+	patterns = pflag.StringArrayP("pattern", "p", nil, "trigger pathname `glob` pattern. (default \"**\")")
+	ignores  = pflag.StringArrayP("ignore", "i", nil, "ignore pathname `glob` pattern.")
 	delay    = pflag.DurationP("delay", "d", time.Second, "`duration` to delay the restart of the command.")
 	sigstr   = pflag.StringP("signal", "s", "SIGTERM", "`signal` to stop the command.")
 	verbose  = pflag.BoolP("verbose", "v", false, "verbose output.")
