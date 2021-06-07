@@ -82,7 +82,7 @@ The detections within the delay are ignored.
 
 The duration is specified as a number with a unit suffix ("ns", "us" (or "µs"), "ms", "s", "m", "h").
 
-### -s, --signal signal
+#### -s, --signal signal
 
 This signal will be sent to stop the command on restart.
 The default signal is `SIGTERM`.
