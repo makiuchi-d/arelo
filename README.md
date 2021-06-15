@@ -9,10 +9,13 @@ When the file that matches the pattern has been modified, restart the command.
  - Monitoring file patterns are specified as glob
    - globstar (**; matches to zero or more directories) supported
    - can match the no extention filename
+   - can match the hidden filename which starts with "."
  - Safely terminate child processes
  - Any command line tool can be executed
    - not only go project
- - No http server
+   - can execute shell script
+ - No unnesesary servers
+   - no need to use local port unlike http server
 
 ## Install
 
