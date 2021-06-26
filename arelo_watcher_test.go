@@ -31,7 +31,7 @@ func TestWatcher(t *testing.T) {
 
 	modC, errC, err := watcher(targets, patterns, ignores, time.Second/10)
 	if err != nil {
-
+		t.Fatalf("watcher: %v", err)
 	}
 
 	// move directory into the target to check the subdirectories are watched.
