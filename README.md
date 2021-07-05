@@ -29,6 +29,14 @@ Or, you can download the executable binaries from the [release page](https://git
 
 To get a static-linked executable binary, build with `CGO_ENABLED=0`.
 
+## Quick start
+
+Run this command in your Go project directory.
+
+```
+arelo -p '**/*.go' -i '**/.*' -i '**/*_test.go' -- go run .
+```
+
 ## Usage
 
 ```
