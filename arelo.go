@@ -274,10 +274,11 @@ func addDirRecursive(w *fsnotify.Watcher, fi os.FileInfo, t string, patterns, ig
 
 func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Duration, sig syscall.Signal) chan<- struct{} {
 	restart := make(chan struct{})
-	trigger := make(chan struct{}, 1)
+	trigger := make(chan struct{})
 
 	go func() {
 		for range restart {
+			// ignore restart when the trigger is not waiting
 			select {
 			case trigger <- struct{}{}:
 			default:
@@ -316,12 +317,6 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 				}
 				close(done)
 			}()
-
-			// ignore trigger before the command started.
-			select {
-			case <-trigger:
-			default:
-			}
 
 			select {
 			case <-ctx.Done():
