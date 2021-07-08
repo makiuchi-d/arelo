@@ -45,7 +45,7 @@ Options:
 func main() {
 	pflag.Parse()
 	if *showver {
-		fmt.Println("arelo version", Version())
+		fmt.Println("arelo version", versionstr())
 		return
 	}
 	cmd := pflag.Args()
@@ -74,7 +74,7 @@ func main() {
 		}
 	}
 	if *help {
-		fmt.Println("arelo version", Version())
+		fmt.Println("arelo version", versionstr())
 		fmt.Fprintf(os.Stderr, usage, os.Args[0])
 		pflag.PrintDefaults()
 		return
@@ -126,9 +126,9 @@ func logVerbose(fmt string, args ...interface{}) {
 	}
 }
 
-func Version() string {
+func versionstr() string {
 	if version != "" {
-		return version
+		return "v" + version
 	}
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
