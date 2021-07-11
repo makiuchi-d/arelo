@@ -29,7 +29,7 @@ func TestWatcher(t *testing.T) {
 	ignores := []string{"**/ignore"}
 	patterns := []string{"**/file"}
 
-	modC, errC, err := watcher(targets, patterns, ignores, time.Second/10)
+	modC, errC, err := watcher(targets, patterns, ignores)
 	if err != nil {
 		t.Fatalf("watcher: %v", err)
 	}

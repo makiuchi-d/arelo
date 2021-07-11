@@ -80,7 +80,7 @@ func main() {
 		return
 	}
 
-	modC, errC, err := watcher(*targets, *patterns, *ignores, *delay)
+	modC, errC, err := watcher(*targets, *patterns, *ignores)
 	if err != nil {
 		log.Fatalf("[ARELO] wacher error: %v", err)
 	}
@@ -137,7 +137,7 @@ func versionstr() string {
 	return info.Main.Version
 }
 
-func watcher(targets, patterns, ignores []string, skip time.Duration) (<-chan string, <-chan error, error) {
+func watcher(targets, patterns, ignores []string) (<-chan string, <-chan error, error) {
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, nil, err
@@ -155,7 +155,6 @@ func watcher(targets, patterns, ignores []string, skip time.Duration) (<-chan st
 
 	go func() {
 		defer close(modC)
-		next := time.Now().Add(skip)
 		for {
 			select {
 			case event, ok := <-w.Events:
@@ -173,14 +172,11 @@ func watcher(targets, patterns, ignores []string, skip time.Duration) (<-chan st
 					continue
 				}
 
-				if time.Now().After(next) {
-					if match, err := matchPatterns(name, patterns); err != nil {
-						errC <- xerrors.Errorf("pattern match error: %w", err)
-						return
-					} else if match {
-						modC <- name
-						next = time.Now().Add(skip)
-					}
+				if match, err := matchPatterns(name, patterns); err != nil {
+					errC <- xerrors.Errorf("pattern match error: %w", err)
+					return
+				} else if match {
+					modC <- name
 				}
 
 				// add watcher if new directory.
