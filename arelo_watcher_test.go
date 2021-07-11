@@ -52,8 +52,8 @@ func TestWatcher(t *testing.T) {
 		{tmpdir + "/target/mv/mvsub/file", true},
 	}
 	for _, test := range tests {
-		clearChan(modC, errC)
 		<-time.NewTimer(time.Second / 5).C
+		clearChan(modC, errC)
 		touchFile(test.file)
 		select {
 		case f := <-modC:
