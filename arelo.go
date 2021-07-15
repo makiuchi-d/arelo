@@ -143,11 +143,8 @@ func watcher(targets, patterns, ignores []string) (<-chan string, <-chan error, 
 		return nil, nil, err
 	}
 
-	for _, t := range targets {
-		err := addTarget(w, t, patterns, ignores)
-		if err != nil {
-			return nil, nil, err
-		}
+	if err := addTargets(w, targets, patterns, ignores); err != nil {
+		return nil, nil, err
 	}
 
 	modC := make(chan string)
@@ -221,17 +218,24 @@ func matchPatterns(t string, pats []string) (bool, error) {
 	return false, nil
 }
 
-func addTarget(w *fsnotify.Watcher, t string, patterns, ignores []string) error {
-	t = path.Clean(t)
-	fi, err := os.Stat(t)
-	if err != nil {
-		return xerrors.Errorf("stat: %w", err)
+func addTargets(w *fsnotify.Watcher, targets, patterns, ignores []string) error {
+	for _, t := range targets {
+		t = path.Clean(t)
+		fi, err := os.Stat(t)
+		if err != nil {
+			return xerrors.Errorf("stat: %w", err)
+		}
+		if fi.IsDir() {
+			if err := addDirRecursive(w, fi, t, patterns, ignores, nil); err != nil {
+				return err
+			}
+		}
+		logVerbose("[ARELO] watching target: %q", t)
+		if err := w.Add(t); err != nil {
+			return err
+		}
 	}
-	if fi.IsDir() {
-		return addDirRecursive(w, fi, t, patterns, ignores, nil)
-	}
-	logVerbose("[ARELO] watching target: %q", t)
-	return w.Add(t)
+	return nil
 }
 
 func addDirRecursive(w *fsnotify.Watcher, fi os.FileInfo, t string, patterns, ignores []string, ch chan<- string) error {
