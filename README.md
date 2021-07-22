@@ -1,6 +1,7 @@
 # Arelo - a simple auto reload utility
 
 [![go test](https://github.com/makiuchi-d/arelo/actions/workflows/test.yml/badge.svg)](https://github.com/makiuchi-d/arelo/actions/workflows/test.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/makiuchi-d/arelo)](https://goreportcard.com/report/github.com/makiuchi-d/arelo)
 
 Arelo executes the specified command and monitors the files under the target directory.
 When the file that matches the pattern has been modified, restart the command.
