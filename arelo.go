@@ -163,14 +163,14 @@ func watcher(targets, patterns, ignores []string) (<-chan string, <-chan error, 
 				name := filepath.ToSlash(event.Name)
 
 				if ignore, err := matchPatterns(name, ignores); err != nil {
-					errC <- xerrors.Errorf("ignore match error: %w", err)
+					errC <- xerrors.Errorf("match ignores: %w", err)
 					return
 				} else if ignore {
 					continue
 				}
 
 				if match, err := matchPatterns(name, patterns); err != nil {
-					errC <- xerrors.Errorf("pattern match error: %w", err)
+					errC <- xerrors.Errorf("match patterns: %w", err)
 					return
 				} else if match {
 					modC <- name
@@ -192,11 +192,7 @@ func watcher(targets, patterns, ignores []string) (<-chan string, <-chan error, 
 				}
 
 			case err, ok := <-w.Errors:
-				if !ok {
-					errC <- xerrors.Errorf("watcher.Errors closed")
-					return
-				}
-				errC <- xerrors.Errorf("wacher error: %w", err)
+				errC <- xerrors.Errorf("watcher.Errors (%v): %w", ok, err)
 				return
 			}
 		}
@@ -209,7 +205,7 @@ func matchPatterns(t string, pats []string) (bool, error) {
 	for _, p := range pats {
 		m, err := doublestar.Match(p, t)
 		if err != nil {
-			return false, err
+			return false, xerrors.Errorf("match(%v, %v): %w", p, t, err)
 		}
 		if m {
 			return true, nil
@@ -251,13 +247,13 @@ func addDirRecursive(w *fsnotify.Watcher, fi os.FileInfo, t string, patterns, ig
 	for _, fi := range fis {
 		name := path.Join(t, fi.Name())
 		if ignore, err := matchPatterns(name, ignores); err != nil {
-			return xerrors.Errorf("ignore match error: %w", err)
+			return xerrors.Errorf("match ignores: %w", err)
 		} else if ignore {
 			continue
 		}
 		if ch != nil {
 			if match, err := matchPatterns(name, patterns); err != nil {
-				return xerrors.Errorf("pattern match error: %w", err)
+				return xerrors.Errorf("match patterns: %w", err)
 			} else if match {
 				ch <- name
 			}
@@ -368,13 +364,13 @@ func runCmd(ctx context.Context, cmd []string, sig syscall.Signal) error {
 	}
 
 	if err := killChilds(c, sig); err != nil {
-		return xerrors.Errorf("kill error: %w", err)
+		return xerrors.Errorf("kill childs: %w", err)
 	}
 
 	select {
 	case <-time.NewTimer(waitForTerm).C:
 		if err := killChilds(c, syscall.SIGKILL); err != nil {
-			return xerrors.Errorf("kill (SIGKILL) error %w", err)
+			return xerrors.Errorf("kill childs (SIGKILL): %w", err)
 		}
 		<-done
 	case <-done:
