@@ -20,7 +20,7 @@ func TestParseSignalOption(t *testing.T) {
 		{[]string{"9", "KILL", "SIGKILL", "SIG_KILL", "SIgKill"}, syscall.SIGKILL, "SIGKILL"},
 		{[]string{"10", "USR1", "SIGUSR1", "SIG_USR1", "SIgUsr1"}, syscall.SIGUSR1, "SIGUSR1"},
 		{[]string{"12", "USR2", "SIGUSR2", "SIG_USR2", "SIgUsr2"}, syscall.SIGUSR2, "SIGUSR2"},
-		{[]string{"15", "TERM", "SIGTERM", "SIG_TERM", "SIgTerm"}, syscall.SIGTERM, "SIGTERM"},
+		{[]string{"15", "TERM", "SIGTERM", "SIG_TERM", "SIgTerm", ""}, syscall.SIGTERM, "SIGTERM"},
 		{[]string{"28", "WINCH", "SIGWINCH", "SIG_WINCH", "SigWinch"}, syscall.SIGWINCH, "SIGWINCH"},
 	}
 	for _, test := range tests {

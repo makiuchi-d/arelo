@@ -36,7 +36,7 @@ Options:
 	patterns = pflag.StringArrayP("pattern", "p", nil, "trigger pathname `glob` pattern. (default \"**\")")
 	ignores  = pflag.StringArrayP("ignore", "i", nil, "ignore pathname `glob` pattern.")
 	delay    = pflag.DurationP("delay", "d", time.Second, "`duration` to delay the restart of the command.")
-	sigstr   = pflag.StringP("signal", "s", "SIGTERM", "`signal` to stop the command.")
+	sigopt   = pflag.StringP("signal", "s", "", "`signal` to stop the command. (default \"SIGTERM\")")
 	verbose  = pflag.BoolP("verbose", "v", false, "verbose output.")
 	help     = pflag.BoolP("help", "h", false, "show this document.")
 	showver  = pflag.BoolP("version", "V", false, "show version.")
@@ -56,7 +56,7 @@ func main() {
 		logVerbose("patterns nil")
 		*patterns = []string{"**"}
 	}
-	sig, sigstr := parseSignalOption(*sigstr)
+	sig, sigstr := parseSignalOption(*sigopt)
 	logVerbose("command:  %q", cmd)
 	logVerbose("targets:  %q", *targets)
 	logVerbose("patterns: %q", *patterns)

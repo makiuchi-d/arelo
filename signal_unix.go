@@ -23,7 +23,7 @@ func parseSignalOption(str string) (os.Signal, string) {
 		return syscall.SIGUSR1, "SIGUSR1"
 	case "12", "USR2", "SIGUSR2", "SIG_USR2":
 		return syscall.SIGUSR2, "SIGUSR2"
-	case "15", "TERM", "SIGTERM", "SIG_TERM":
+	case "15", "TERM", "SIGTERM", "SIG_TERM", "":
 		return syscall.SIGTERM, "SIGTERM"
 	case "28", "WINCH", "SIGWINCH", "SIG_WINCH":
 		return syscall.SIGWINCH, "SIGWINCH"
