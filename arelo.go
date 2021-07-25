@@ -64,20 +64,20 @@ func main() {
 	logVerbose("delay:    %v", delay)
 	logVerbose("signal:   %s", sigstr)
 
-	if !*help {
-		if len(cmd) == 0 {
-			fmt.Fprintf(os.Stderr, "%s: COMMAND required.\n", os.Args[0])
-			*help = true
-		} else if sig == nil {
-			fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], sigstr)
-			*help = true
-		}
-	}
 	if *help {
 		fmt.Println("arelo version", versionstr())
 		fmt.Fprintf(os.Stderr, usage, os.Args[0])
 		pflag.PrintDefaults()
 		return
+	}
+
+	if len(cmd) == 0 {
+		fmt.Fprintf(os.Stderr, "%s: COMMAND required.\n", os.Args[0])
+		os.Exit(1)
+	}
+	if sig == nil {
+		fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], sigstr)
+		os.Exit(1)
 	}
 
 	modC, errC, err := watcher(*targets, *patterns, *ignores)
