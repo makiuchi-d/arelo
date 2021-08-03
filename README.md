@@ -73,8 +73,10 @@ but arelo cannot follow modification after the file has been removed/renamed.
 #### -p, --pattern glob
 
 Restart command when the modified file is matched to this pattern.
+
 The pattern is specified as an extended glob
 that supports `{alt1,...}`, `**` like zsh or bash with globstar option.
+And note that the path delimiter is `/` even on Windows.
 
 This option can set multiple times.
 
