@@ -101,8 +101,8 @@ func main() {
 					log.Fatalf("[ARELO] wacher closed")
 					return
 				}
-				log.Printf("[ARELO] modified: %q", name)
-				restartC <- struct{}{}
+				logVerbose("modified: %q", name)
+				restartC <- name
 			case err := <-errC:
 				cancel()
 				wg.Wait()
@@ -268,15 +268,15 @@ func addDirRecursive(w *fsnotify.Watcher, fi os.FileInfo, t string, patterns, ig
 	return nil
 }
 
-func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Duration, sig syscall.Signal) chan<- struct{} {
-	restart := make(chan struct{})
-	trigger := make(chan struct{})
+func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Duration, sig syscall.Signal) chan<- string {
+	restart := make(chan string)
+	trigger := make(chan string)
 
 	go func() {
-		for range restart {
+		for name := range restart {
 			// ignore restart when the trigger is not waiting
 			select {
-			case trigger <- struct{}{}:
+			case trigger <- name:
 			default:
 			}
 		}
@@ -319,7 +319,8 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 				cancel()
 				<-done
 				return
-			case <-trigger:
+			case name := <-trigger:
+				log.Printf("[ARELO] triggered: %q", name)
 			}
 
 			logVerbose("wait %v", delay)
