@@ -2,22 +2,19 @@ package main
 
 import (
 	"os"
+	"path"
 	"testing"
 	"time"
 )
 
 func TestWatcher(t *testing.T) {
-	tmpdir, err := os.MkdirTemp("", "arelo-test-*")
-	if err != nil {
-		t.Fatalf("MkdirTemp: %v", err)
-	}
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	dirs := []string{
-		tmpdir + "/target",
-		tmpdir + "/target/sub",
-		tmpdir + "/target/ignore",
-		tmpdir + "/mv/mvsub",
+		path.Join(tmpdir, "target"),
+		path.Join(tmpdir, "target", "sub"),
+		path.Join(tmpdir, "target", "ignore"),
+		path.Join(tmpdir, "mv", "mvsub"),
 	}
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0755); err != nil {
@@ -35,7 +32,7 @@ func TestWatcher(t *testing.T) {
 	}
 
 	// move directory into the target to check the subdirectories are watched.
-	if err := os.Rename(tmpdir+"/mv", tmpdir+"/target/mv"); err != nil {
+	if err := os.Rename(path.Join(tmpdir, "mv"), path.Join(tmpdir, "target", "mv")); err != nil {
 		t.Fatalf("Rename: %v", err)
 	}
 
@@ -43,13 +40,13 @@ func TestWatcher(t *testing.T) {
 		file   string
 		detect bool
 	}{
-		{tmpdir + "/target/file", true},
-		{tmpdir + "/target/file2", false},
-		{tmpdir + "/file", false},
-		{tmpdir + "/target/sub/file", true},
-		{tmpdir + "/target/ignore/file", false},
-		{tmpdir + "/target/mv/file", true},
-		{tmpdir + "/target/mv/mvsub/file", true},
+		{path.Join(tmpdir, "target", "file"), true},
+		{path.Join(tmpdir, "target", "file2"), false},
+		{path.Join(tmpdir, "file"), false},
+		{path.Join(tmpdir, "target", "sub", "file"), true},
+		{path.Join(tmpdir, "target", "ignore", "file"), false},
+		{path.Join(tmpdir, "target", "mv", "file"), true},
+		{path.Join(tmpdir, "target", "mv", "mvsub", "file"), true},
 	}
 	for _, test := range tests {
 		<-time.NewTimer(time.Second / 5).C
