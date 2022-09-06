@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -268,6 +270,38 @@ func addDirRecursive(w *fsnotify.Watcher, fi os.FileInfo, t string, patterns, ig
 	return nil
 }
 
+type bytesErr struct {
+	bytes []byte
+	err   error
+}
+
+type stdinReader struct {
+	ch   <-chan bytesErr
+	done <-chan struct{}
+}
+
+func (s *stdinReader) discard() {
+	for {
+		select {
+		case <-s.ch:
+		case <-s.done:
+			return
+		}
+	}
+}
+
+func (s *stdinReader) Read(b []byte) (int, error) {
+	select {
+	case be, ok := <-s.ch:
+		if !ok {
+			return 0, io.EOF
+		}
+		return copy(b, be.bytes), be.err
+	case <-s.done:
+		return 0, io.EOF
+	}
+}
+
 func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Duration, sig syscall.Signal) chan<- string {
 	restart := make(chan string)
 	trigger := make(chan string)
@@ -291,6 +325,17 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 	}
 	pcmd = pcmd[1:]
 
+	stdinC := make(chan bytesErr, 1)
+	go func() {
+		b1 := make([]byte, 255)
+		b2 := make([]byte, 255)
+		for {
+			n, err := os.Stdin.Read(b1)
+			stdinC <- bytesErr{b1[:n], err}
+			b1, b2 = b2, b1
+		}
+	}()
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -305,12 +350,14 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 
 			go func() {
 				log.Printf("[ARELO] start: %s", pcmd)
-				err := runCmd(ctx, cmd, sig)
+				stdin := &stdinReader{stdinC, ctx.Done()}
+				err := runCmd(ctx, cmd, sig, stdin)
 				if err != nil {
 					log.Printf("[ARELO] command error: %v", err)
 				} else {
 					log.Printf("[ARELO] command exit status 0")
 				}
+				stdin.discard()
 				close(done)
 			}()
 
@@ -340,8 +387,9 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 	return restart
 }
 
-func runCmd(ctx context.Context, cmd []string, sig syscall.Signal) error {
+func runCmd(ctx context.Context, cmd []string, sig syscall.Signal, stdin *stdinReader) error {
 	c := prepareCommand(cmd)
+	c.Stdin = bufio.NewReader(stdin)
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 	if err := c.Start(); err != nil {
