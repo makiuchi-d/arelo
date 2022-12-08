@@ -212,6 +212,15 @@ func matchPatterns(t string, pats []string) (bool, error) {
 		if m {
 			return true, nil
 		}
+		if strings.HasPrefix(t, "./") {
+			m, err = doublestar.Match(p, t[2:])
+			if err != nil {
+				return false, xerrors.Errorf("match(%v, %v): %w", p, t[2:], err)
+			}
+			if m {
+				return true, nil
+			}
+		}
 	}
 	return false, nil
 }

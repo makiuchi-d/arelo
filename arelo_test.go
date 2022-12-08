@@ -84,3 +84,27 @@ func clearChan(c <-chan string, ce <-chan error) {
 func touchFile(file string) {
 	os.WriteFile(file, []byte("a"), 0644)
 }
+
+func TestMatchPatterns(t *testing.T) {
+	tests := []struct {
+		t, pat string
+		wants  bool
+	}{
+		{"ab/cd/efg", "**/efg", true},
+		{"ab/cd/efg", "*/efg", false},
+		{"./abc.efg", "**/*.efg", true},
+		{"./abc.efg", "*.efg", true},
+		{"./.abc", "**/.*", true},
+		{"./.abc", ".*", true},
+	}
+
+	for _, test := range tests {
+		r, err := matchPatterns(test.t, []string{test.pat})
+		if err != nil {
+			t.Fatalf("matchPatterns(%v, {%v}): %v", test.t, test.pat, err)
+		}
+		if r != test.wants {
+			t.Fatalf("matchPatterns(%v, {%v}) = %v wants %v", test.t, test.pat, r, test.wants)
+		}
+	}
+}
