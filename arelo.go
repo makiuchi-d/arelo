@@ -423,19 +423,18 @@ func runCmd(ctx context.Context, cmd []string, sig syscall.Signal, stdin *stdinR
 		}
 		return cerr
 	case <-ctx.Done():
-	}
-
-	if err := killChilds(c, sig); err != nil {
-		return xerrors.Errorf("kill childs: %w", err)
+		if err := killChilds(c, sig); err != nil {
+			return xerrors.Errorf("kill childs: %w", err)
+		}
 	}
 
 	select {
+	case <-done:
 	case <-time.NewTimer(waitForTerm).C:
 		if err := killChilds(c, syscall.SIGKILL); err != nil {
 			return xerrors.Errorf("kill childs (SIGKILL): %w", err)
 		}
 		<-done
-	case <-done:
 	}
 
 	if cerr != nil {
