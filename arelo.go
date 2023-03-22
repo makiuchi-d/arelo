@@ -289,14 +289,16 @@ type bytesErr struct {
 }
 
 type stdinReader struct {
-	ch   <-chan bytesErr
-	done <-chan struct{}
+	ch      <-chan bytesErr
+	sigchld <-chan struct{}
+	done    <-chan struct{}
 }
 
 func (s *stdinReader) discard() {
 	for {
 		select {
 		case <-s.ch:
+		case <-s.sigchld:
 		case <-s.done:
 			return
 		}
@@ -310,8 +312,20 @@ func (s *stdinReader) Read(b []byte) (int, error) {
 			return 0, io.EOF
 		}
 		return copy(b, be.bytes), be.err
+	case <-s.sigchld:
+		return 0, io.EOF
 	case <-s.done:
 		return 0, io.EOF
+	}
+}
+
+func clearChBuf[T any](c <-chan T) {
+	for {
+		select {
+		case <-c:
+		default:
+			return
+		}
 	}
 }
 
@@ -349,6 +363,19 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 		}
 	}()
 
+	sigchldC := make(chan struct{}, 1)
+	go func() {
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, syscall.SIGCHLD)
+		for {
+			<-c
+			select {
+			case sigchldC <- struct{}{}:
+			default:
+			}
+		}
+	}()
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -363,7 +390,8 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 
 			go func() {
 				log.Printf("[ARELO] start: %s", pcmd)
-				stdin := &stdinReader{stdinC, ctx.Done()}
+				clearChBuf(sigchldC)
+				stdin := &stdinReader{stdinC, sigchldC, ctx.Done()}
 				err := runCmd(ctx, cmd, sig, stdin)
 				if err != nil {
 					log.Printf("[ARELO] command error: %v", err)
