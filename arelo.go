@@ -38,6 +38,7 @@ Options:
 	patterns = pflag.StringArrayP("pattern", "p", nil, "trigger pathname `glob` pattern. (default \"**\")")
 	ignores  = pflag.StringArrayP("ignore", "i", nil, "ignore pathname `glob` pattern.")
 	delay    = pflag.DurationP("delay", "d", time.Second, "`duration` to delay the restart of the command.")
+	restart  = pflag.BoolP("restart", "r", false, "auto restart the command on exit.")
 	sigopt   = pflag.StringP("signal", "s", "", "`signal` to stop the command. (default \"SIGTERM\")")
 	verbose  = pflag.BoolP("verbose", "v", false, "verbose output.")
 	help     = pflag.BoolP("help", "h", false, "show this document.")
@@ -65,6 +66,7 @@ func main() {
 	logVerbose("ignores:  %q", *ignores)
 	logVerbose("delay:    %v", delay)
 	logVerbose("signal:   %s", sigstr)
+	logVerbose("restart:  %v", *restart)
 
 	if *help {
 		fmt.Println("arelo version", versionstr())
@@ -89,7 +91,7 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
-	restartC := runner(ctx, &wg, cmd, *delay, sig.(syscall.Signal))
+	reload := runner(ctx, &wg, cmd, *delay, sig.(syscall.Signal), *restart)
 
 	go func() {
 		for {
@@ -104,7 +106,7 @@ func main() {
 					return
 				}
 				logVerbose("modified: %q", name)
-				restartC <- name
+				reload <- name
 			case err := <-errC:
 				cancel()
 				wg.Wait()
@@ -183,7 +185,7 @@ func watcher(targets, patterns, ignores []string) (<-chan string, <-chan error, 
 					fi, err := os.Stat(name)
 					if err != nil {
 						// ignore stat errors (notfound, permission, etc.)
-						log.Printf("watcher: %v", err)
+						log.Printf("[ARELO] watcher: %v", err)
 					} else if fi.IsDir() {
 						err := addDirRecursive(w, fi, name, patterns, ignores, modC)
 						if err != nil {
@@ -237,7 +239,7 @@ func addTargets(w *fsnotify.Watcher, targets, patterns, ignores []string) error 
 				return err
 			}
 		}
-		logVerbose("[ARELO] watching target: %q", t)
+		logVerbose("watching target: %q", t)
 		if err := w.Add(t); err != nil {
 			return err
 		}
@@ -329,12 +331,12 @@ func clearChBuf[T any](c <-chan T) {
 	}
 }
 
-func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Duration, sig syscall.Signal) chan<- string {
-	restart := make(chan string)
+func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Duration, sig syscall.Signal, autorestart bool) chan<- string {
+	reload := make(chan string)
 	trigger := make(chan string)
 
 	go func() {
-		for name := range restart {
+		for name := range reload {
 			// ignore restart when the trigger is not waiting
 			select {
 			case trigger <- name:
@@ -385,19 +387,24 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 				return
 			default:
 			}
-			ctx, cancel := context.WithCancel(ctx)
+			cmdctx, cancel := context.WithCancel(ctx)
+			restart := make(chan struct{})
 			done := make(chan struct{})
 
 			go func() {
 				log.Printf("[ARELO] start: %s", pcmd)
 				clearChBuf(sigchldC)
-				stdin := &stdinReader{stdinC, sigchldC, ctx.Done()}
-				err := runCmd(ctx, cmd, sig, stdin)
+				stdin := &stdinReader{stdinC, sigchldC, cmdctx.Done()}
+				err := runCmd(cmdctx, cmd, sig, stdin)
 				if err != nil {
 					log.Printf("[ARELO] command error: %v", err)
 				} else {
 					log.Printf("[ARELO] command exit status 0")
 				}
+				if autorestart {
+					close(restart)
+				}
+
 				stdin.discard()
 				close(done)
 			}()
@@ -409,6 +416,8 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 				return
 			case name := <-trigger:
 				log.Printf("[ARELO] triggered: %q", name)
+			case <-restart:
+				logVerbose("auto restart")
 			}
 
 			logVerbose("wait %v", delay)
@@ -425,7 +434,7 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 		}
 	}()
 
-	return restart
+	return reload
 }
 
 func runCmd(ctx context.Context, cmd []string, sig syscall.Signal, stdin *stdinReader) error {
