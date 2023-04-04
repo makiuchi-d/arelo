@@ -290,17 +290,21 @@ type bytesErr struct {
 	err   error
 }
 
+// stdinReader bypasses stdin to child processes
+//
+// cmd.Wait() blocks until stdin.Read() returns.
+// so stdinReader.Read() returns EOF when the child process exited.
 type stdinReader struct {
-	ch      <-chan bytesErr
-	sigchld <-chan struct{}
-	done    <-chan struct{}
+	ch       <-chan bytesErr
+	chldDone <-chan struct{}
+	done     <-chan struct{}
 }
 
 func (s *stdinReader) discard() {
 	for {
 		select {
 		case <-s.ch:
-		case <-s.sigchld:
+		case <-s.chldDone:
 		case <-s.done:
 			return
 		}
@@ -314,7 +318,7 @@ func (s *stdinReader) Read(b []byte) (int, error) {
 			return 0, io.EOF
 		}
 		return copy(b, be.bytes), be.err
-	case <-s.sigchld:
+	case <-s.chldDone:
 		return 0, io.EOF
 	case <-s.done:
 		return 0, io.EOF
@@ -365,18 +369,7 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 		}
 	}()
 
-	sigchldC := make(chan struct{}, 1)
-	go func() {
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, syscall.SIGCHLD)
-		for {
-			<-c
-			select {
-			case sigchldC <- struct{}{}:
-			default:
-			}
-		}
-	}()
+	chldDone := makeChildDoneChan()
 
 	wg.Add(1)
 	go func() {
@@ -393,8 +386,8 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 
 			go func() {
 				log.Printf("[ARELO] start: %s", pcmd)
-				clearChBuf(sigchldC)
-				stdin := &stdinReader{stdinC, sigchldC, cmdctx.Done()}
+				clearChBuf(chldDone)
+				stdin := &stdinReader{stdinC, chldDone, cmdctx.Done()}
 				err := runCmd(cmdctx, cmd, sig, stdin)
 				if err != nil {
 					log.Printf("[ARELO] command error: %v", err)
@@ -449,7 +442,7 @@ func runCmd(ctx context.Context, cmd []string, sig syscall.Signal, stdin *stdinR
 	var cerr error
 	done := make(chan struct{})
 	go func() {
-		cerr = c.Wait()
+		cerr = waitCmd(c)
 		close(done)
 	}()
 
