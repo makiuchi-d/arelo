@@ -295,32 +295,18 @@ type bytesErr struct {
 // cmd.Wait() blocks until stdin.Read() returns.
 // so stdinReader.Read() returns EOF when the child process exited.
 type stdinReader struct {
-	ch       <-chan bytesErr
+	input    <-chan bytesErr
 	chldDone <-chan struct{}
-	done     <-chan struct{}
-}
-
-func (s *stdinReader) discard() {
-	for {
-		select {
-		case <-s.ch:
-		case <-s.chldDone:
-		case <-s.done:
-			return
-		}
-	}
 }
 
 func (s *stdinReader) Read(b []byte) (int, error) {
 	select {
-	case be, ok := <-s.ch:
+	case be, ok := <-s.input:
 		if !ok {
 			return 0, io.EOF
 		}
 		return copy(b, be.bytes), be.err
 	case <-s.chldDone:
-		return 0, io.EOF
-	case <-s.done:
 		return 0, io.EOF
 	}
 }
@@ -387,7 +373,7 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 			go func() {
 				log.Printf("[ARELO] start: %s", pcmd)
 				clearChBuf(chldDone)
-				stdin := &stdinReader{stdinC, chldDone, cmdctx.Done()}
+				stdin := &stdinReader{stdinC, chldDone}
 				err := runCmd(cmdctx, cmd, sig, stdin)
 				if err != nil {
 					log.Printf("[ARELO] command error: %v", err)
@@ -398,7 +384,6 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 					close(restart)
 				}
 
-				stdin.discard()
 				close(done)
 			}()
 

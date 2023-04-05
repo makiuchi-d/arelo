@@ -40,11 +40,17 @@ func makeChildDoneChan() <-chan struct{} {
 				err := windows.GetExitCodeProcess(p, &code)
 				if err != nil {
 					log.Printf("GetExitCodeProcess: %v", err)
-					c <- struct{}{}
+					select {
+					case c <- struct{}{}:
+					default:
+					}
 					break
 				}
 				if code != STILL_ACTIVE {
-					c <- struct{}{}
+					select {
+					case c <- struct{}{}:
+					default:
+					}
 					break
 				}
 			}
@@ -57,7 +63,6 @@ func makeChildDoneChan() <-chan struct{} {
 func waitCmd(cmd *exec.Cmd) error {
 	p, err := windows.OpenProcess(
 		windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(cmd.Process.Pid))
-	log.Printf("pid=%v handle=%v", cmd.Process.Pid, p)
 	if err != nil {
 		return xerrors.Errorf("OpenProcess: %w", err)
 	}
