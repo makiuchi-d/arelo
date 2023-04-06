@@ -41,6 +41,7 @@ Options:
 	delay    = pflag.DurationP("delay", "d", time.Second, "`duration` to delay the restart of the command")
 	restart  = pflag.BoolP("restart", "r", false, "restart the command on exit")
 	sigopt   = pflag.StringP("signal", "s", "", "`signal` used to stop the command (default \"SIGTERM\")")
+	nostdin  = pflag.BoolP("no-stdin", "n", false, "do not forward stdin to the command")
 	verbose  = pflag.BoolP("verbose", "v", false, "verbose output")
 	help     = pflag.BoolP("help", "h", false, "display this message")
 	showver  = pflag.BoolP("version", "V", false, "display version")
@@ -105,7 +106,7 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
-	reload := runner(ctx, &wg, cmd, *delay, sig.(syscall.Signal), *restart)
+	reload := runner(ctx, &wg, cmd, *delay, sig.(syscall.Signal), *restart, *nostdin)
 
 	go func() {
 		for {
@@ -362,7 +363,7 @@ func clearChBuf[T any](c <-chan T) {
 	}
 }
 
-func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Duration, sig syscall.Signal, autorestart bool) chan<- string {
+func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Duration, sig syscall.Signal, autorestart, nostdin bool) chan<- string {
 	reload := make(chan string)
 	trigger := make(chan string)
 
@@ -396,7 +397,10 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 		}
 	}()
 
-	chldDone := makeChildDoneChan()
+	var chldDone <-chan struct{}
+	if !nostdin {
+		chldDone = makeChildDoneChan()
+	}
 
 	wg.Add(1)
 	go func() {
@@ -414,7 +418,10 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 			go func() {
 				log.Printf("[ARELO] start: %s", pcmd)
 				clearChBuf(chldDone)
-				stdin := &stdinReader{stdinC, chldDone}
+				var stdin *stdinReader
+				if !nostdin {
+					stdin = &stdinReader{stdinC, chldDone}
+				}
 				err := runCmd(cmdctx, cmd, sig, stdin)
 				if err != nil {
 					log.Printf("[ARELO] command error: %v", err)
@@ -457,7 +464,9 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 
 func runCmd(ctx context.Context, cmd []string, sig syscall.Signal, stdin *stdinReader) error {
 	c := prepareCommand(cmd)
-	c.Stdin = bufio.NewReader(stdin)
+	if stdin != nil {
+		c.Stdin = bufio.NewReader(stdin)
+	}
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 	if err := c.Start(); err != nil {
