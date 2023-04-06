@@ -45,14 +45,15 @@ Usage: arelo [OPTION]... -- COMMAND
 Run the COMMAND and restart when a file matches the pattern has been modified.
 
 Options:
-  -d, --delay duration   duration to delay the restart of the command. (default 1s)
-  -h, --help             show this document.
-  -i, --ignore glob      ignore pathname glob pattern.
-  -p, --pattern glob     trigger pathname glob pattern. (default "**")
-  -s, --signal signal    signal to stop the command. (default "SIGTERM")
-  -t, --target path      observation target path. (default "./")
-  -v, --verbose          verbose output.
-  -V, --version          show version.
+  -d, --delay duration   duration to delay the restart of the command (default 1s)
+  -h, --help             display this message
+  -i, --ignore glob      ignore pathname glob pattern
+  -p, --pattern glob     trigger pathname glob pattern (default "**")
+  -r, --restart          restart the command on exit
+  -s, --signal signal    signal used to stop the command (default "SIGTERM")
+  -t, --target path      observation target path (default "./")
+  -v, --verbose          verbose output
+  -V, --version          display version
 ```
 
 ### Options

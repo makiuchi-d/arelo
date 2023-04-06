@@ -29,20 +29,20 @@ const (
 
 var (
 	version string
-	usage   = `Usage: %s [OPTION]... -- COMMAND
+	usage   = `Usage: arelo [OPTION]... -- COMMAND
 Run the COMMAND and restart when a file matches the pattern has been modified.
 
 Options:
 `
-	targets  = pflag.StringArrayP("target", "t", nil, "observation target `path`. (default \"./\")")
-	patterns = pflag.StringArrayP("pattern", "p", nil, "trigger pathname `glob` pattern. (default \"**\")")
-	ignores  = pflag.StringArrayP("ignore", "i", nil, "ignore pathname `glob` pattern.")
-	delay    = pflag.DurationP("delay", "d", time.Second, "`duration` to delay the restart of the command.")
-	restart  = pflag.BoolP("restart", "r", false, "auto restart the command on exit.")
-	sigopt   = pflag.StringP("signal", "s", "", "`signal` to stop the command. (default \"SIGTERM\")")
-	verbose  = pflag.BoolP("verbose", "v", false, "verbose output.")
-	help     = pflag.BoolP("help", "h", false, "show this document.")
-	showver  = pflag.BoolP("version", "V", false, "show version.")
+	targets  = pflag.StringArrayP("target", "t", nil, "observation target `path` (default \"./\")")
+	patterns = pflag.StringArrayP("pattern", "p", nil, "trigger pathname `glob` pattern (default \"**\")")
+	ignores  = pflag.StringArrayP("ignore", "i", nil, "ignore pathname `glob` pattern")
+	delay    = pflag.DurationP("delay", "d", time.Second, "`duration` to delay the restart of the command")
+	restart  = pflag.BoolP("restart", "r", false, "restart the command on exit")
+	sigopt   = pflag.StringP("signal", "s", "", "`signal` used to stop the command (default \"SIGTERM\")")
+	verbose  = pflag.BoolP("verbose", "v", false, "verbose output")
+	help     = pflag.BoolP("help", "h", false, "display this message")
+	showver  = pflag.BoolP("version", "V", false, "display version")
 )
 
 func main() {
@@ -70,7 +70,7 @@ func main() {
 
 	if *help {
 		fmt.Println("arelo version", versionstr())
-		fmt.Fprintf(os.Stderr, usage, os.Args[0])
+		fmt.Fprintf(os.Stderr, usage)
 		pflag.PrintDefaults()
 		return
 	}
