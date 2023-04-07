@@ -36,7 +36,7 @@ func parseSignalOption(str string) (os.Signal, string) {
 
 // makeChildDoneChan returns a chan that notifies the child process has exited.
 //
-// On UNIX, it is notified by SIGCHLD.
+// On UNIX like OS, it is notified by SIGCHLD.
 func makeChildDoneChan() <-chan struct{} {
 	c := make(chan struct{}, 1)
 	go func() {

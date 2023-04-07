@@ -108,9 +108,17 @@ This option can be `SIGHUP`, `SIGINT`, `SIGQUIT`, `SIGKILL`, `SIGUSR1`, `SIGUSR2
 
 This option is not available on Windows.
 
+#### -r, --restart
+
+Automatically restart the command when it exits, similar to when the pattern matched file is modified.
+
 #### -v, --verbose
 
 Output logs verbosely.
+
+#### -V, --version
+
+Print version informatin.
 
 #### -h, --help
 
