@@ -19,7 +19,7 @@ jobs:
           cache: true
           cache-dependency-path: "server/go.sum"
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v4
+        uses: goreleaser/goreleaser-action@v5
         with:
           distribution: goreleaser
           version: latest
