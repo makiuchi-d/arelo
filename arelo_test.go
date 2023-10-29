@@ -49,7 +49,7 @@ func TestWatcher(t *testing.T) {
 		{path.Join(tmpdir, "target", "mv", "mvsub", "file"), true},
 	}
 	for _, test := range tests {
-		<-time.NewTimer(time.Second / 5).C
+		<-time.After(time.Second / 5)
 		clearChan(modC, errC)
 		touchFile(test.file)
 		select {
@@ -62,7 +62,7 @@ func TestWatcher(t *testing.T) {
 			}
 		case e := <-errC:
 			t.Fatalf("watcher error: %v", e)
-		case <-time.NewTimer(time.Second / 5).C:
+		case <-time.After(time.Second / 5):
 			if test.detect {
 				t.Fatalf("must be detect: %q", test.file)
 			}

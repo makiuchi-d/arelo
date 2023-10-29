@@ -56,7 +56,6 @@ func main() {
 		*targets = []string{"./"}
 	}
 	if *patterns == nil {
-		logVerbose("patterns nil")
 		*patterns = []string{"**"}
 	}
 	sig, sigstr := parseSignalOption(*sigopt)
@@ -399,13 +398,12 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 			}
 
 			logVerbose("wait %v", delay)
-			t := time.NewTimer(delay)
 			select {
 			case <-ctx.Done():
 				cancel()
 				<-done
 				return
-			case <-t.C:
+			case <-time.After(delay):
 			}
 			cancel()
 			<-done // wait process closed
@@ -445,7 +443,7 @@ func runCmd(ctx context.Context, cmd []string, sig syscall.Signal, stdin *stdinR
 
 	select {
 	case <-done:
-	case <-time.NewTimer(waitForTerm).C:
+	case <-time.After(waitForTerm):
 		if err := killChilds(c, syscall.SIGKILL); err != nil {
 			return xerrors.Errorf("kill childs (SIGKILL): %w", err)
 		}
