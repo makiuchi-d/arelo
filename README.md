@@ -46,6 +46,7 @@ Run the COMMAND and restart when a file matches the pattern has been modified.
 
 Options:
   -d, --delay duration   duration to delay the restart of the command (default 1s)
+  -f, --filter event     filter file system event (CREATE|WRITE|REMOVE|RENAME|CHMOD)
   -h, --help             display this message
   -i, --ignore glob      ignore pathname glob pattern
   -p, --pattern glob     trigger pathname glob pattern (default "**")
@@ -91,6 +92,14 @@ This option takes precedence over the --pattern option.
 
 This option can set multiple times.
 
+
+#### -f, --filter event
+
+Filter the filesystem event to ignore it.
+
+The event can be `CREATE`, `WRITE`, `REMOVE`, `RENAME` or `CHMOD`.
+
+This option can set multiple times.
 
 #### -d, --delay duration
 
@@ -153,3 +162,4 @@ Command to run.
  - [gin](https://github.com/codegangsta/gin)
  - [go-task](https://github.com/go-task/task)
  - [air](https://github.com/cosmtrek/air)
+ - [reflex](https://github.com/cespare/reflex)

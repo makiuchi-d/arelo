@@ -43,6 +43,7 @@ Options:
 	verbose  = pflag.BoolP("verbose", "v", false, "verbose output")
 	help     = pflag.BoolP("help", "h", false, "display this message")
 	showver  = pflag.BoolP("version", "V", false, "display version")
+	filters  = pflag.StringArrayP("filter", "f", nil, "filter file system `event` (CREATE|WRITE|REMOVE|RENAME|CHMOD)")
 )
 
 func main() {
@@ -59,10 +60,15 @@ func main() {
 		*patterns = []string{"**"}
 	}
 	sig, sigstr := parseSignalOption(*sigopt)
+	filtOp, err := parseFileters(*filters)
+	if err != nil {
+		log.Fatalf("[ARELO] %v", err)
+	}
 	logVerbose("command:  %q", cmd)
 	logVerbose("targets:  %q", *targets)
 	logVerbose("patterns: %q", *patterns)
 	logVerbose("ignores:  %q", *ignores)
+	logVerbose("filter:   %v", filtOp)
 	logVerbose("delay:    %v", delay)
 	logVerbose("signal:   %s", sigstr)
 	logVerbose("restart:  %v", *restart)
@@ -83,7 +89,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	modC, errC, err := watcher(*targets, *patterns, *ignores)
+	modC, errC, err := watcher(*targets, *patterns, *ignores, filtOp)
 	if err != nil {
 		log.Fatalf("[ARELO] wacher error: %v", err)
 	}
@@ -104,7 +110,6 @@ func main() {
 					log.Fatalf("[ARELO] wacher closed")
 					return
 				}
-				logVerbose("modified: %q", name)
 				reload <- name
 			case err := <-errC:
 				cancel()
@@ -140,7 +145,28 @@ func versionstr() string {
 	return info.Main.Version
 }
 
-func watcher(targets, patterns, ignores []string) (<-chan string, <-chan error, error) {
+func parseFileters(filters []string) (fsnotify.Op, error) {
+	var op fsnotify.Op
+	for _, f := range filters {
+		switch strings.ToUpper(f) {
+		case "CREATE":
+			op |= fsnotify.Create
+		case "WRITE":
+			op |= fsnotify.Write
+		case "REMOVE":
+			op |= fsnotify.Remove
+		case "RENAME":
+			op |= fsnotify.Rename
+		case "CHMOD":
+			op |= fsnotify.Chmod
+		default:
+			return 0, xerrors.Errorf("invalid filter event: %s", f)
+		}
+	}
+	return op, nil
+}
+
+func watcher(targets, patterns, ignores []string, filtOp fsnotify.Op) (<-chan string, <-chan error, error) {
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, nil, err
@@ -152,6 +178,7 @@ func watcher(targets, patterns, ignores []string) (<-chan string, <-chan error, 
 
 	modC := make(chan string)
 	errC := make(chan error)
+	watchOp := ^filtOp
 
 	go func() {
 		defer close(modC)
@@ -164,6 +191,7 @@ func watcher(targets, patterns, ignores []string) (<-chan string, <-chan error, 
 				}
 
 				name := filepath.ToSlash(event.Name)
+				logVerbose("event: %v %q", event.Op, name)
 
 				if ignore, err := matchPatterns(name, ignores); err != nil {
 					errC <- xerrors.Errorf("match ignores: %w", err)
@@ -172,11 +200,13 @@ func watcher(targets, patterns, ignores []string) (<-chan string, <-chan error, 
 					continue
 				}
 
-				if match, err := matchPatterns(name, patterns); err != nil {
-					errC <- xerrors.Errorf("match patterns: %w", err)
-					return
-				} else if match {
-					modC <- name
+				if event.Has(watchOp) {
+					if match, err := matchPatterns(name, patterns); err != nil {
+						errC <- xerrors.Errorf("match patterns: %w", err)
+						return
+					} else if match {
+						modC <- name
+					}
 				}
 
 				// add watcher if new directory.
