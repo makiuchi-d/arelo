@@ -60,7 +60,7 @@ func main() {
 		*patterns = []string{"**"}
 	}
 	sig, sigstr := parseSignalOption(*sigopt)
-	filtOp, err := parseFileters(*filters)
+	filtOp, err := parseFilters(*filters)
 	if err != nil {
 		log.Fatalf("[ARELO] %v", err)
 	}
@@ -145,7 +145,7 @@ func versionstr() string {
 	return info.Main.Version
 }
 
-func parseFileters(filters []string) (fsnotify.Op, error) {
+func parseFilters(filters []string) (fsnotify.Op, error) {
 	var op fsnotify.Op
 	for _, f := range filters {
 		switch strings.ToUpper(f) {

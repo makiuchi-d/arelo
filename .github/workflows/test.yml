@@ -18,7 +18,7 @@ jobs:
       with:
         go-version-file: "go.mod"
         cache: true
-        cache-dependency-path: "server/go.sum"
+        cache-dependency-path: "go.sum"
 
     - name: Test
       run: go test -v -race -shuffle=on ./...
