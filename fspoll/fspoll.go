@@ -6,6 +6,21 @@ import (
 )
 
 type Event = fsnotify.Event
+type Op = fsnotify.Op
+
+const (
+	Create = fsnotify.Create
+	Write  = fsnotify.Write
+	Remove = fsnotify.Remove
+	Rename = fsnotify.Rename
+	Chmod  = fsnotify.Chmod
+)
+
+var (
+	ErrNonExistentWatch = fsnotify.ErrNonExistentWatch
+	ErrEventOverflow    = fsnotify.ErrEventOverflow
+	ErrClosed           = fsnotify.ErrClosed
+)
 
 // Watcher is a common interface for fspoll and fsnotify
 type Watcher interface {
@@ -27,50 +42,4 @@ type Watcher interface {
 
 	// Errors returns a channel that receives errors.
 	Errors() <-chan error
-}
-
-// Poller is a polling watcher for file changes.
-type Poller struct {
-	events chan Event
-	errors chan error
-}
-
-var _ Watcher = &Poller{}
-
-// New generates a new Poller.
-func New() *Poller {
-	return &Poller{
-		events: make(chan Event),
-		errors: make(chan error),
-	}
-}
-
-// Add starts watching the path for changes.
-func (p *Poller) Add(name string) error {
-	return nil
-}
-
-// Close stops all watches and closes the channels.
-func (p *Poller) Close() error {
-	return nil
-}
-
-// Remove stops watching the specified path.
-func (p *Poller) Remove(name string) error {
-	return nil
-}
-
-// WatchList returns a list of watching path names.
-func (p *Poller) WatchList() []string {
-	return nil
-}
-
-// Events returns a channel that receives filesystem events.
-func (p *Poller) Events() <-chan Event {
-	return p.events
-}
-
-// Errors returns a channel that receives errors.
-func (p *Poller) Errors() <-chan error {
-	return p.errors
 }

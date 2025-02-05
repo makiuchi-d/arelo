@@ -1,9 +1,11 @@
 package fspoll_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
@@ -28,17 +30,22 @@ func TestFsnotify(t *testing.T) {
 
 func TestFspoll(t *testing.T) {
 	t.Parallel()
-	testSingleFile(t, fspoll.New)
-	testDirectory(t, fspoll.New)
+	newW := func() fspoll.Watcher {
+		return fspoll.New(100 * time.Millisecond)
+	}
+
+	testSingleFile(t, newW)
+	testDirectory(t, newW)
 }
 
 func must(t *testing.T, err error) {
 	if err != nil {
-		t.Fatal(err)
+		_, f, l, _ := runtime.Caller(1)
+		t.Fatalf("%v:%v: %v", f, l, err)
 	}
 }
 
-func waitEvent(t *testing.T, w fspoll.Watcher, name string, op fsnotify.Op) {
+func waitEvent(t *testing.T, w fspoll.Watcher, name string, op fspoll.Op) {
 	timeout := time.After(eventWaitTimeout)
 	for {
 		select {
@@ -101,21 +108,27 @@ func testSingleFile[W fspoll.Watcher](t *testing.T, newW func() W) {
 
 		t.Log("write")
 		fp.Write([]byte("a"))
-		waitEvent(t, w, fname, fsnotify.Write)
+		waitEvent(t, w, fname, fspoll.Write)
 
 		t.Log("chmod")
 		fp.Chmod(0700)
-		waitEvent(t, w, fname, fsnotify.Chmod)
+		waitEvent(t, w, fname, fspoll.Chmod)
 
 		t.Log("remove")
 		fp.Close()
 		os.Remove(fname)
-		waitEvent(t, w, fname, fsnotify.Remove)
+		waitEvent(t, w, fname, fspoll.Remove)
 
 		t.Log("create after removed")
 		fp2, err := os.Create(fname)
 		defer fp2.Close()
 		waitNoEvent(t, w)
+
+		t.Log("call Remove after removed")
+		err = w.Remove(fname)
+		if !errors.Is(err, fspoll.ErrNonExistentWatch) {
+			t.Fatalf("watcher.Remove must be ErrNonExistentWatch: err=%v", err)
+		}
 	})
 }
 
