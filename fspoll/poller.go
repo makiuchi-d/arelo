@@ -3,7 +3,6 @@ package fspoll
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -192,8 +191,6 @@ func (p *Poller) pollingDir(ctx context.Context, name string, fi fs.FileInfo) {
 			}
 			continue
 		}
-		fmt.Println("de.Name:", de.Name())
-
 		prev[de.Name()] = makeStat(fi)
 	}
 

@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/fs"
 	"log"
 	"os"
 	"os/signal"
@@ -21,6 +20,8 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/pflag"
 	"golang.org/x/xerrors"
+
+	"github.com/makiuchi-d/arelo/fspoll"
 )
 
 const (
@@ -44,6 +45,7 @@ Options:
 	help     = pflag.BoolP("help", "h", false, "display this message")
 	showver  = pflag.BoolP("version", "V", false, "display version")
 	filters  = pflag.StringArrayP("filter", "f", nil, "filter file system `event` (CREATE|WRITE|REMOVE|RENAME|CHMOD)")
+	polling  = pflag.Duration("polling", 0, "poll files at given `interval` instead of using fsnotify")
 )
 
 func main() {
@@ -166,12 +168,18 @@ func parseFilters(filters []string) (fsnotify.Op, error) {
 	return op, nil
 }
 
+func newWatcher() (fspoll.Watcher, error) {
+	if *polling == 0 {
+		return fspoll.Wrap(fsnotify.NewWatcher())
+	}
+	return fspoll.New(*polling), nil
+}
+
 func watcher(targets, patterns, ignores []string, filtOp fsnotify.Op) (<-chan string, <-chan error, error) {
-	w, err := fsnotify.NewWatcher()
+	w, err := newWatcher()
 	if err != nil {
 		return nil, nil, err
 	}
-
 	if err := addTargets(w, targets, patterns, ignores); err != nil {
 		return nil, nil, err
 	}
@@ -184,7 +192,7 @@ func watcher(targets, patterns, ignores []string, filtOp fsnotify.Op) (<-chan st
 		defer close(modC)
 		for {
 			select {
-			case event, ok := <-w.Events:
+			case event, ok := <-w.Events():
 				if !ok {
 					errC <- xerrors.Errorf("watcher.Events closed")
 					return
@@ -216,7 +224,7 @@ func watcher(targets, patterns, ignores []string, filtOp fsnotify.Op) (<-chan st
 						// ignore stat errors (notfound, permission, etc.)
 						log.Printf("[ARELO] watcher: %v", err)
 					} else if fi.IsDir() {
-						err := addDirRecursive(w, fi, name, patterns, ignores, modC)
+						err := addDirRecursive(w, name, patterns, ignores, modC)
 						if err != nil {
 							errC <- err
 							return
@@ -224,7 +232,7 @@ func watcher(targets, patterns, ignores []string, filtOp fsnotify.Op) (<-chan st
 					}
 				}
 
-			case err, ok := <-w.Errors:
+			case err, ok := <-w.Errors():
 				errC <- xerrors.Errorf("watcher.Errors (%v): %w", ok, err)
 				return
 			}
@@ -256,7 +264,7 @@ func matchPatterns(t string, pats []string) (bool, error) {
 	return false, nil
 }
 
-func addTargets(w *fsnotify.Watcher, targets, patterns, ignores []string) error {
+func addTargets(w fspoll.Watcher, targets, patterns, ignores []string) error {
 	for _, t := range targets {
 		t = path.Clean(t)
 		fi, err := os.Stat(t)
@@ -264,7 +272,7 @@ func addTargets(w *fsnotify.Watcher, targets, patterns, ignores []string) error 
 			return xerrors.Errorf("stat: %w", err)
 		}
 		if fi.IsDir() {
-			if err := addDirRecursive(w, fi, t, patterns, ignores, nil); err != nil {
+			if err := addDirRecursive(w, t, patterns, ignores, nil); err != nil {
 				return err
 			}
 		}
@@ -276,7 +284,7 @@ func addTargets(w *fsnotify.Watcher, targets, patterns, ignores []string) error 
 	return nil
 }
 
-func addDirRecursive(w *fsnotify.Watcher, fi fs.FileInfo, t string, patterns, ignores []string, ch chan<- string) error {
+func addDirRecursive(w fspoll.Watcher, t string, patterns, ignores []string, ch chan<- string) error {
 	logVerbose("watching target: %q", t)
 	err := w.Add(t)
 	if err != nil {
@@ -301,11 +309,7 @@ func addDirRecursive(w *fsnotify.Watcher, fi fs.FileInfo, t string, patterns, ig
 			}
 		}
 		if de.IsDir() {
-			fi, err := de.Info()
-			if err != nil {
-				return err
-			}
-			err = addDirRecursive(w, fi, name, patterns, ignores, ch)
+			err = addDirRecursive(w, name, patterns, ignores, ch)
 			if err != nil {
 				return err
 			}
