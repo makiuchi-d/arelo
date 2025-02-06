@@ -14,7 +14,8 @@ import (
 )
 
 const (
-	eventWaitTimeout = time.Second * 2
+	eventWaitTimeout = time.Second / 2
+	pollingInterval  = time.Second / 10
 )
 
 func TestFsnotify(t *testing.T) {
@@ -31,7 +32,7 @@ func TestFsnotify(t *testing.T) {
 func TestFspoll(t *testing.T) {
 	t.Parallel()
 	newW := func() fspoll.Watcher {
-		return fspoll.New(100 * time.Millisecond)
+		return fspoll.New(pollingInterval)
 	}
 
 	testSingleFile(t, newW)
