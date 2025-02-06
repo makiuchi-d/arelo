@@ -146,19 +146,27 @@ func testDirectory[W fspoll.Watcher](t *testing.T, newW func() W) {
 		os.Mkdir(dname1, 0755)
 		must(t, w.Add(dname1))
 
+		t.Log("chmod basedir")
+		os.Chmod(dir, 0700)
+		waitNoEvent(t, w)
+
 		t.Log("create file")
 		fp1, err := os.Create(fname1)
 		must(t, err)
 		defer fp1.Close()
-		waitEvent(t, w, fname1, fsnotify.Create)
+		waitEvent(t, w, fname1, fspoll.Create)
 
 		t.Log("write file")
 		fp1.Write([]byte("a"))
-		waitEvent(t, w, fname1, fsnotify.Write)
+		waitEvent(t, w, fname1, fspoll.Write)
+
+		t.Log("chmod file")
+		os.Chmod(fname1, 0700)
+		waitEvent(t, w, fname1, fspoll.Chmod)
 
 		t.Log("create subdir")
 		os.Mkdir(dname2, 0755)
-		waitEvent(t, w, dname2, fsnotify.Create)
+		waitEvent(t, w, dname2, fspoll.Create)
 
 		t.Log("create file in subdir")
 		fp2, err := os.Create(fname2)
@@ -166,12 +174,18 @@ func testDirectory[W fspoll.Watcher](t *testing.T, newW func() W) {
 		defer fp2.Close()
 		waitNoEvent(t, w)
 
+		t.Log("remove file")
+		os.Remove(fname1)
+		waitEvent(t, w, fname1, fspoll.Remove)
+
 		t.Log("chmod dir")
 		os.Chmod(dname1, 0700)
-		waitEvent(t, w, dname1, fsnotify.Chmod)
+		waitEvent(t, w, dname1, fspoll.Chmod)
 
 		t.Log("remove from watcher")
 		must(t, w.Remove(dname1))
+
+		t.Log("write after removed")
 		fp1.Write([]byte("a"))
 		waitNoEvent(t, w)
 	})

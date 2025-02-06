@@ -3,8 +3,10 @@ package fspoll
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -123,7 +125,167 @@ func (p *Poller) Errors() <-chan error {
 	return p.errors
 }
 
+func (p *Poller) isClosed() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.closed
+}
+
+func (p *Poller) sendEvent(ctx context.Context, name string, op Op) bool {
+	if p.isClosed() {
+		return false
+	}
+	select {
+	case <-ctx.Done():
+		return false
+	case p.events <- Event{Name: name, Op: op}:
+		return true
+	}
+}
+
+func (p *Poller) sendError(ctx context.Context, err error) bool {
+	if p.isClosed() {
+		return false
+	}
+	select {
+	case <-ctx.Done():
+		return false
+	case p.errors <- err:
+		return true
+	}
+}
+
+type stat struct {
+	mode    fs.FileMode
+	modtime time.Time
+	size    int64
+}
+
+func makeStat(fi fs.FileInfo) stat {
+	return stat{
+		mode:    fi.Mode(),
+		modtime: fi.ModTime(),
+		size:    fi.Size(),
+	}
+}
+
 func (p *Poller) pollingDir(ctx context.Context, name string, fi fs.FileInfo) {
+	des, err := os.ReadDir(name)
+	if err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			p.sendError(ctx, err)
+		}
+		return
+	}
+
+	mode := fi.Mode()
+	prev := make(map[string]stat)
+	cur := make(map[string]stat)
+
+	for _, de := range des {
+		fi, err := de.Info()
+		if err != nil {
+			if !errors.Is(err, fs.ErrNotExist) {
+				if !p.sendError(ctx, err) {
+					return
+				}
+			}
+			continue
+		}
+		fmt.Println("de.Name:", de.Name())
+
+		prev[de.Name()] = makeStat(fi)
+	}
+
+	t := time.NewTicker(p.interval)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+
+		// check mode of target dir
+		fi, err := os.Stat(name)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return
+			}
+			if !p.sendError(ctx, err) {
+				return
+			}
+		}
+		if m := fi.Mode(); m != mode {
+			if !p.sendEvent(ctx, name, Chmod) {
+				return
+			}
+			mode = m
+		}
+
+		// check entries in the target dir
+		des, err := os.ReadDir(name)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return
+			}
+			if !p.sendError(ctx, err) {
+				return
+			}
+			continue
+		}
+
+		for _, de := range des {
+			basename := de.Name()
+			fullname := filepath.Join(name, basename)
+
+			fi, err := de.Info()
+			if err != nil {
+				if errors.Is(err, fs.ErrNotExist) {
+					if !p.sendEvent(ctx, fullname, Remove) {
+						return
+					}
+				} else {
+					if !p.sendError(ctx, err) {
+						return
+					}
+				}
+				continue
+			}
+
+			cs := makeStat(fi)
+			cur[basename] = cs
+			ps, ok := prev[basename]
+			if !ok {
+				if !p.sendEvent(ctx, fullname, Create) {
+					return
+				}
+				continue
+			}
+			delete(prev, basename)
+
+			if cs.mode != ps.mode {
+				if !p.sendEvent(ctx, fullname, Chmod) {
+					return
+				}
+			}
+			if !fi.IsDir() { // ignore changes in the subdir
+				if cs.modtime != ps.modtime || cs.size != ps.size {
+					if !p.sendEvent(ctx, fullname, Write) {
+						return
+					}
+				}
+			}
+		}
+
+		for n := range prev {
+			if !p.sendEvent(ctx, filepath.Join(name, n), Remove) {
+				return
+			}
+		}
+		clear(prev)
+		prev, cur = cur, prev
+	}
 }
 
 func (p *Poller) pollingFile(ctx context.Context, name string, fi fs.FileInfo) {
@@ -165,35 +327,5 @@ func (p *Poller) pollingFile(ctx context.Context, name string, fi fs.FileInfo) {
 				return
 			}
 		}
-	}
-}
-
-func (p *Poller) isClosed() bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.closed
-}
-
-func (p *Poller) sendEvent(ctx context.Context, name string, op Op) bool {
-	if p.isClosed() {
-		return false
-	}
-	select {
-	case <-ctx.Done():
-		return false
-	case p.events <- Event{Name: name, Op: op}:
-		return true
-	}
-}
-
-func (p *Poller) sendError(ctx context.Context, err error) bool {
-	if p.isClosed() {
-		return false
-	}
-	select {
-	case <-ctx.Done():
-		return false
-	case p.errors <- err:
-		return true
 	}
 }
