@@ -7,7 +7,17 @@ import (
 	"time"
 )
 
-func TestWatcher(t *testing.T) {
+func TestWatcherFsnotify(t *testing.T) {
+	t.Parallel()
+	testWatcher(t, 0)
+}
+
+func TestWatcherFspoll(t *testing.T) {
+	t.Parallel()
+	testWatcher(t, time.Second/10)
+}
+
+func testWatcher(t *testing.T, polling time.Duration) {
 	tmpdir := t.TempDir()
 
 	dirs := []string{
@@ -26,7 +36,7 @@ func TestWatcher(t *testing.T) {
 	ignores := []string{"**/ignore"}
 	patterns := []string{"**/file"}
 
-	modC, errC, err := watcher(targets, patterns, ignores, 0)
+	modC, errC, err := watcher(targets, patterns, ignores, 0, polling)
 	if err != nil {
 		t.Fatalf("watcher: %v", err)
 	}
@@ -51,6 +61,7 @@ func TestWatcher(t *testing.T) {
 	for _, test := range tests {
 		<-time.After(time.Second / 5)
 		clearChan(modC, errC)
+		t.Logf("touch %v => detect %v", test.file, test.detect)
 		touchFile(test.file)
 		select {
 		case f := <-modC:

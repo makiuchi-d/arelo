@@ -59,14 +59,21 @@ func (p *Poller) Add(name string) error {
 	ctx, cancel := context.WithCancel(p.ctx)
 	p.cancellers[name] = cancel
 
+	ready := make(chan struct{})
 	go func() {
 		if fi.IsDir() {
-			p.pollingDir(ctx, name, fi)
+			p.pollingDir(ctx, name, fi, ready)
 		} else {
-			p.pollingFile(ctx, name, fi)
+			p.pollingFile(ctx, name, fi, ready)
 		}
+		cancel()
 		_ = p.Remove(name)
 	}()
+
+	select {
+	case <-ctx.Done():
+	case <-ready:
+	}
 
 	return nil
 }
@@ -168,7 +175,7 @@ func makeStat(fi fs.FileInfo) stat {
 	}
 }
 
-func (p *Poller) pollingDir(ctx context.Context, name string, fi fs.FileInfo) {
+func (p *Poller) pollingDir(ctx context.Context, name string, fi fs.FileInfo, ready chan struct{}) {
 	des, err := os.ReadDir(name)
 	if err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
@@ -194,8 +201,8 @@ func (p *Poller) pollingDir(ctx context.Context, name string, fi fs.FileInfo) {
 		prev[de.Name()] = makeStat(fi)
 	}
 
+	close(ready)
 	t := time.NewTicker(p.interval)
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -285,13 +292,13 @@ func (p *Poller) pollingDir(ctx context.Context, name string, fi fs.FileInfo) {
 	}
 }
 
-func (p *Poller) pollingFile(ctx context.Context, name string, fi fs.FileInfo) {
-	t := time.NewTicker(p.interval)
-
+func (p *Poller) pollingFile(ctx context.Context, name string, fi fs.FileInfo, ready chan struct{}) {
 	mode := fi.Mode()
 	modt := fi.ModTime()
 	size := fi.Size()
 
+	close(ready)
+	t := time.NewTicker(p.interval)
 	for {
 		select {
 		case <-ctx.Done():

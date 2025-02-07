@@ -91,7 +91,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	modC, errC, err := watcher(*targets, *patterns, *ignores, filtOp)
+	modC, errC, err := watcher(*targets, *patterns, *ignores, filtOp, *polling)
 	if err != nil {
 		log.Fatalf("[ARELO] wacher error: %v", err)
 	}
@@ -168,15 +168,15 @@ func parseFilters(filters []string) (fsnotify.Op, error) {
 	return op, nil
 }
 
-func newWatcher() (fspoll.Watcher, error) {
-	if *polling == 0 {
+func newWatcher(interval time.Duration) (fspoll.Watcher, error) {
+	if interval == 0 {
 		return fspoll.Wrap(fsnotify.NewWatcher())
 	}
-	return fspoll.New(*polling), nil
+	return fspoll.New(interval), nil
 }
 
-func watcher(targets, patterns, ignores []string, filtOp fsnotify.Op) (<-chan string, <-chan error, error) {
-	w, err := newWatcher()
+func watcher(targets, patterns, ignores []string, filtOp fsnotify.Op, interval time.Duration) (<-chan string, <-chan error, error) {
+	w, err := newWatcher(interval)
 	if err != nil {
 		return nil, nil, err
 	}
