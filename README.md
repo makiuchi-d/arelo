@@ -45,16 +45,17 @@ Usage: arelo [OPTION]... -- COMMAND
 Run the COMMAND and restart when a file matches the pattern has been modified.
 
 Options:
-  -d, --delay duration   duration to delay the restart of the command (default 1s)
-  -f, --filter event     filter file system event (CREATE|WRITE|REMOVE|RENAME|CHMOD)
-  -h, --help             display this message
-  -i, --ignore glob      ignore pathname glob pattern
-  -p, --pattern glob     trigger pathname glob pattern (default "**")
-  -r, --restart          restart the command on exit
-  -s, --signal signal    signal used to stop the command (default "SIGTERM")
-  -t, --target path      observation target path (default "./")
-  -v, --verbose          verbose output
-  -V, --version          display version
+  -d, --delay duration     duration to delay the restart of the command (default 1s)
+  -f, --filter event       filter file system event (CREATE|WRITE|REMOVE|RENAME|CHMOD)
+  -h, --help               display this message
+  -i, --ignore glob        ignore pathname glob pattern
+  -p, --pattern glob       trigger pathname glob pattern (default "**")
+      --polling interval   poll files at given interval instead of using fsnotify
+  -r, --restart            restart the command on exit
+  -s, --signal signal      signal used to stop the command (default "SIGTERM")
+  -t, --target path        observation target path (default "./")
+  -v, --verbose            verbose output
+  -V, --version            display version
 ```
 
 ### Options
@@ -120,6 +121,15 @@ This option is not available on Windows.
 #### -r, --restart
 
 Automatically restart the command when it exits, similar to when the pattern matched file is modified.
+
+#### --polling interval
+
+Poll files at the specified interval instead of using fsnotify.
+If not set or set to `0`, fsnotify is used for file monitoring.
+
+This option is useful when fsnotify cannot detect changes, such as on WSL2.
+
+The interval is specified as a number with a unit suffix ("ns", "us" (or "µs"), "ms", "s", "m", "h").
 
 #### -v, --verbose
 
