@@ -122,6 +122,7 @@ func testSingleFile[W fspoll.Watcher](t *testing.T, newW func() W) {
 
 		t.Log("create after removed")
 		fp2, err := os.Create(fname)
+		must(t, err)
 		defer fp2.Close()
 		waitNoEvent(t, w)
 
