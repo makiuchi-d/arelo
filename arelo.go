@@ -61,6 +61,8 @@ func main() {
 	if *patterns == nil {
 		*patterns = []string{"**"}
 	}
+	*patterns = removeCurDirPrefix(*patterns)
+	*ignores = removeCurDirPrefix(*ignores)
 	sig, sigstr := parseSignalOption(*sigopt)
 	filtOp, err := parseFilters(*filters)
 	if err != nil {
@@ -145,6 +147,15 @@ func versionstr() string {
 		return "(devel)"
 	}
 	return info.Main.Version
+}
+
+func removeCurDirPrefix(arr []string) []string {
+	for i, s := range arr {
+		if strings.HasPrefix(s, "./") {
+			arr[i] = s[2:]
+		}
+	}
+	return arr
 }
 
 func parseFilters(filters []string) (fsnotify.Op, error) {
@@ -243,6 +254,9 @@ func watcher(targets, patterns, ignores []string, filtOp fsnotify.Op, interval t
 }
 
 func matchPatterns(t string, pats []string) (bool, error) {
+	if strings.HasPrefix(t, "./") {
+		t = t[2:]
+	}
 	for _, p := range pats {
 		m, err := doublestar.Match(p, t)
 		if err != nil {
@@ -250,15 +264,6 @@ func matchPatterns(t string, pats []string) (bool, error) {
 		}
 		if m {
 			return true, nil
-		}
-		if strings.HasPrefix(t, "./") {
-			m, err = doublestar.Match(p, t[2:])
-			if err != nil {
-				return false, xerrors.Errorf("match(%v, %v): %w", p, t[2:], err)
-			}
-			if m {
-				return true, nil
-			}
 		}
 	}
 	return false, nil

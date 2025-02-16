@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -107,6 +108,9 @@ func TestMatchPatterns(t *testing.T) {
 		{"./abc.efg", "*.efg", true},
 		{"./.abc", "**/.*", true},
 		{"./.abc", ".*", true},
+		{"./", "", true},
+		{"./", "*", true},
+		{"./", "**", true},
 	}
 
 	for _, test := range tests {
@@ -117,5 +121,36 @@ func TestMatchPatterns(t *testing.T) {
 		if r != test.wants {
 			t.Fatalf("matchPatterns(%v, {%v}) = %v wants %v", test.t, test.pat, r, test.wants)
 		}
+	}
+}
+
+func TestRemoveCurDirPrefix(t *testing.T) {
+	arr := []string{
+		".a",
+		".aa",
+		"./.*",
+		"./abc",
+		"../a",
+		".",
+		"./",
+		"abc",
+		"a./",
+		"a/./b",
+	}
+	exp := []string{
+		".a",
+		".aa",
+		".*",
+		"abc",
+		"../a",
+		".",
+		"",
+		"abc",
+		"a./",
+		"a/./b",
+	}
+	r := removeCurDirPrefix(arr)
+	if !reflect.DeepEqual(r, exp) {
+		t.Fatalf("removeCurDirPrefix: %#v wants %#v", r, exp)
 	}
 }
