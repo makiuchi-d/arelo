@@ -131,6 +131,25 @@ func testSingleFile[W fspoll.Watcher](t *testing.T, newW func() W) {
 		if !errors.Is(err, fspoll.ErrNonExistentWatch) {
 			t.Fatalf("watcher.Remove must be ErrNonExistentWatch: err=%v", err)
 		}
+
+		t.Log("close watcher")
+		w.Close()
+		select {
+		case _, ok := <-w.Events():
+			if ok {
+				t.Fatalf("Event channel is not closed")
+			}
+		case <-time.After(pollingInterval * 2):
+			t.Fatalf("Events channel is not closed")
+		}
+		select {
+		case _, ok := <-w.Errors():
+			if ok {
+				t.Fatalf("Errors channel is not closed")
+			}
+		case <-time.After(pollingInterval * 2):
+			t.Fatalf("Errors channel is not closed")
+		}
 	})
 }
 
