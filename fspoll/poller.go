@@ -19,6 +19,7 @@ type Poller struct {
 
 	ctx    context.Context
 	cancel context.CancelFunc
+	wg     sync.WaitGroup
 
 	mu         sync.RWMutex
 	closed     bool
@@ -28,7 +29,7 @@ type Poller struct {
 // New generates a new Poller.
 func New(interval time.Duration) *Poller {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Poller{
+	p := &Poller{
 		events:     make(chan Event, 1),
 		errors:     make(chan error, 1),
 		interval:   interval,
@@ -36,6 +37,13 @@ func New(interval time.Duration) *Poller {
 		cancel:     cancel,
 		cancellers: make(map[string]context.CancelFunc),
 	}
+	go func() {
+		<-p.ctx.Done()
+		p.wg.Wait()
+		close(p.events)
+		close(p.errors)
+	}()
+	return p
 }
 
 // Add starts watching the path for changes.
@@ -60,7 +68,9 @@ func (p *Poller) Add(name string) error {
 	p.cancellers[name] = cancel
 
 	ready := make(chan struct{})
+	p.wg.Add(1)
 	go func() {
+		defer p.wg.Done()
 		if fi.IsDir() {
 			p.pollingDir(ctx, name, fi, ready)
 		} else {
