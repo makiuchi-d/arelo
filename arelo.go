@@ -76,6 +76,11 @@ func main() {
 	logVerbose("delay:    %v", delay)
 	logVerbose("signal:   %s", sigstr)
 	logVerbose("restart:  %v", *restart)
+	if *polling != 0 {
+		logVerbose("polling:  true (%v)", *polling)
+	} else {
+		logVerbose("polling:  false")
+	}
 
 	if *help {
 		fmt.Println("arelo version", versionstr())
