@@ -26,6 +26,12 @@ When the file that matches the pattern has been modified, restart the command.
 go install github.com/makiuchi-d/arelo@latest
 ```
 
+Alternatively, you can install it via [Homebrew](https://formulae.brew.sh/formula/arelo):
+
+```
+brew install arelo
+```
+
 Or, you can download the executable binaries from the [release page](https://github.com/makiuchi-d/arelo/releases).
 
 To get a static-linked executable binary, build with `CGO_ENABLED=0`.
