@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -34,6 +35,8 @@ func parseSignalOption(str string) (os.Signal, string) {
 	return nil, fmt.Sprintf("unspported signal: %s", str)
 }
 
+var childDone <-chan struct{}
+
 // makeChildDoneChan returns a chan that notifies the child process has exited.
 //
 // On UNIX like OS, it is notified by SIGCHLD.
@@ -53,14 +56,36 @@ func makeChildDoneChan() <-chan struct{} {
 	return c
 }
 
+func clearChBuf[T any](c <-chan T) {
+	for {
+		select {
+		case <-c:
+		default:
+			return
+		}
+	}
+}
+
 func prepareCommand(cmd []string) *exec.Cmd {
 	c := exec.Command(cmd[0], cmd[1:]...)
 	c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	return c
 }
 
-func waitCmd(cmd *exec.Cmd) error {
-	return cmd.Wait()
+func startCommand(c *exec.Cmd, stdinC <-chan bytesErr) error {
+	if stdinC != nil {
+		if childDone == nil {
+			childDone = makeChildDoneChan()
+		}
+		clearChBuf(childDone)
+
+		c.Stdin = bufio.NewReader(&stdinReader{
+			input: stdinC,
+			done:  childDone,
+		})
+	}
+
+	return c.Start()
 }
 
 func killChilds(c *exec.Cmd, sig syscall.Signal) error {

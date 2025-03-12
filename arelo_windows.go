@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bufio"
 	"log"
 	"os"
 	"os/exec"
@@ -25,58 +26,72 @@ func parseSignalOption(str string) (os.Signal, string) {
 	return nil, "Signal option (--signal, -s) is not available on Windows."
 }
 
-// makeChildDoneChan returns a chan that notifies the child process has exited.
+// childWatcher monitors the process and close channel when it exits.
 //
 // On Windows, poll until GetExitCodeProcess() returns anything other than STILL_ACTIVE.
-func makeChildDoneChan() <-chan struct{} {
-	c := make(chan struct{}, 1)
-	procC = make(chan windows.Handle)
-	go func() {
-		for {
-			p := <-procC
-			for {
-				time.Sleep(*delay / 2)
-				var code uint32
-				err := windows.GetExitCodeProcess(p, &code)
-				if err != nil {
-					log.Printf("GetExitCodeProcess: %v", err)
-					select {
-					case c <- struct{}{}:
-					default:
-					}
-					break
-				}
-				if code != STILL_ACTIVE {
-					select {
-					case c <- struct{}{}:
-					default:
-					}
-					break
-				}
-			}
-			windows.CloseHandle(p)
+func childWatcher(p windows.Handle, done chan struct{}) {
+	for {
+		time.Sleep(*delay / 2)
+		var code uint32
+		err := windows.GetExitCodeProcess(p, &code)
+		if err != nil {
+			log.Printf("[ARELO] GetExitCodeProcess: %v", err)
+			close(done)
+			return
 		}
-	}()
-	return c
-}
-
-func waitCmd(cmd *exec.Cmd) error {
-	p, err := windows.OpenProcess(
-		windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(cmd.Process.Pid))
-	if err != nil {
-		return xerrors.Errorf("OpenProcess: %w", err)
+		if code != STILL_ACTIVE {
+			close(done)
+			windows.CloseHandle(p)
+			return
+		}
 	}
-	procC <- p
-	return cmd.Wait()
 }
 
 func prepareCommand(cmd []string) *exec.Cmd {
-	return exec.Command(cmd[0], cmd[1:]...)
+	c := exec.Command(cmd[0], cmd[1:]...)
+	c.SysProcAttr = &syscall.SysProcAttr{
+		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP,
+	}
+	return c
 }
 
-func killChilds(c *exec.Cmd, sig syscall.Signal) error {
+func startCommand(c *exec.Cmd, stdinC <-chan bytesErr) error {
+	var childDone chan struct{}
+	if stdinC != nil {
+		childDone = make(chan struct{})
+
+		c.Stdin = bufio.NewReader(&stdinReader{
+			input: stdinC,
+			done:  childDone,
+		})
+	}
+
+	err := c.Start()
+	if err != nil {
+		if childDone != nil {
+			close(childDone)
+		}
+		return err
+	}
+
+	if childDone != nil {
+		p, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(c.Process.Pid))
+		if err != nil {
+			if err := killChilds(c, syscall.SIGINT); err != nil {
+				log.Printf("[ARELO] killChilds: %v", err)
+			}
+			close(childDone)
+			return xerrors.Errorf("OpenProcess: %w", err)
+		}
+
+		go childWatcher(p, childDone)
+	}
+	return nil
+}
+
+func killChilds(c *exec.Cmd, _ syscall.Signal) error {
 	kill := exec.Command("TASKKILL", "/T", "/F", "/PID", strconv.Itoa(c.Process.Pid))
 	kill.Stderr = c.Stderr
-	kill.Stdout = c.Stdout
+	kill.Stdout = c.Stderr
 	return kill.Run()
 }

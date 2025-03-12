@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -337,8 +336,8 @@ type bytesErr struct {
 // cmd.Wait() blocks until stdin.Read() returns.
 // so stdinReader.Read() returns EOF when the child process exited.
 type stdinReader struct {
-	input    <-chan bytesErr
-	chldDone <-chan struct{}
+	input <-chan bytesErr
+	done  <-chan struct{}
 }
 
 func (s *stdinReader) Read(b []byte) (int, error) {
@@ -348,18 +347,8 @@ func (s *stdinReader) Read(b []byte) (int, error) {
 			return 0, io.EOF
 		}
 		return copy(b, be.bytes), be.err
-	case <-s.chldDone:
+	case <-s.done:
 		return 0, io.EOF
-	}
-}
-
-func clearChBuf[T any](c <-chan T) {
-	for {
-		select {
-		case <-c:
-		default:
-			return
-		}
 	}
 }
 
@@ -386,20 +375,18 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 	}
 	pcmd = pcmd[1:]
 
-	stdinC := make(chan bytesErr, 1)
-	go func() {
-		b1 := make([]byte, 255)
-		b2 := make([]byte, 255)
-		for {
-			n, err := os.Stdin.Read(b1)
-			stdinC <- bytesErr{b1[:n], err}
-			b1, b2 = b2, b1
-		}
-	}()
-
-	var chldDone <-chan struct{}
+	var stdinC chan bytesErr
 	if !nostdin {
-		chldDone = makeChildDoneChan()
+		stdinC = make(chan bytesErr)
+		go func() {
+			b1 := make([]byte, 255)
+			b2 := make([]byte, 255)
+			for {
+				n, err := os.Stdin.Read(b1)
+				stdinC <- bytesErr{b1[:n], err}
+				b1, b2 = b2, b1
+			}
+		}()
 	}
 
 	wg.Add(1)
@@ -417,12 +404,7 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 
 			go func() {
 				log.Printf("[ARELO] start: %s", pcmd)
-				clearChBuf(chldDone)
-				var stdin *stdinReader
-				if !nostdin {
-					stdin = &stdinReader{stdinC, chldDone}
-				}
-				err := runCmd(cmdctx, cmd, sig, stdin)
+				err := runCmd(cmdctx, cmd, sig, stdinC)
 				if err != nil {
 					log.Printf("[ARELO] command error: %v", err)
 				} else {
@@ -462,21 +444,18 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 	return reload
 }
 
-func runCmd(ctx context.Context, cmd []string, sig syscall.Signal, stdin *stdinReader) error {
+func runCmd(ctx context.Context, cmd []string, sig syscall.Signal, stdinC <-chan bytesErr) error {
 	c := prepareCommand(cmd)
-	if stdin != nil {
-		c.Stdin = bufio.NewReader(stdin)
-	}
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
-	if err := c.Start(); err != nil {
+	if err := startCommand(c, stdinC); err != nil {
 		return err
 	}
 
 	var cerr error
 	done := make(chan struct{})
 	go func() {
-		cerr = waitCmd(c)
+		cerr = c.Wait()
 		close(done)
 	}()
 
