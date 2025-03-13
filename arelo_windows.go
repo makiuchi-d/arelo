@@ -3,8 +3,7 @@
 package main
 
 import (
-	"bufio"
-	"log"
+	"context"
 	"os"
 	"os/exec"
 	"strconv"
@@ -26,28 +25,7 @@ func parseSignalOption(str string) (os.Signal, string) {
 	return nil, "Signal option (--signal, -s) is not available on Windows."
 }
 
-// childWatcher monitors the process and close channel when it exits.
-//
-// On Windows, poll until GetExitCodeProcess() returns anything other than STILL_ACTIVE.
-func childWatcher(p windows.Handle, done chan struct{}) {
-	for {
-		time.Sleep(*delay / 2)
-		var code uint32
-		err := windows.GetExitCodeProcess(p, &code)
-		if err != nil {
-			log.Printf("[ARELO] GetExitCodeProcess: %v", err)
-			close(done)
-			return
-		}
-		if code != STILL_ACTIVE {
-			close(done)
-			windows.CloseHandle(p)
-			return
-		}
-	}
-}
-
-func prepareCommand(cmd []string) *exec.Cmd {
+func prepareCommand(cmd []string, _ bool) *exec.Cmd {
 	c := exec.Command(cmd[0], cmd[1:]...)
 	c.SysProcAttr = &syscall.SysProcAttr{
 		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP,
@@ -55,38 +33,30 @@ func prepareCommand(cmd []string) *exec.Cmd {
 	return c
 }
 
-func startCommand(c *exec.Cmd, stdinC <-chan bytesErr) error {
-	var childDone chan struct{}
-	if stdinC != nil {
-		childDone = make(chan struct{})
-
-		c.Stdin = bufio.NewReader(&stdinReader{
-			input: stdinC,
-			done:  childDone,
-		})
-	}
-
-	err := c.Start()
+// watchChild detects the termination of the child process by polling GetExitCodeProcess.
+func watchChild(ctx context.Context, c *exec.Cmd) error {
+	p, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(c.Process.Pid))
 	if err != nil {
-		if childDone != nil {
-			close(childDone)
-		}
-		return err
+		return xerrors.Errorf("OpenProcess: %w", err)
 	}
+	defer windows.CloseHandle(p)
 
-	if childDone != nil {
-		p, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(c.Process.Pid))
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(*delay / 2):
+		}
+
+		var code uint32
+		err := windows.GetExitCodeProcess(p, &code)
 		if err != nil {
-			if err := killChilds(c, syscall.SIGINT); err != nil {
-				log.Printf("[ARELO] killChilds: %v", err)
-			}
-			close(childDone)
-			return xerrors.Errorf("OpenProcess: %w", err)
+			return xerrors.Errorf("GetExitCodeProcess: %w", err)
 		}
-
-		go childWatcher(p, childDone)
+		if code != STILL_ACTIVE {
+			return nil
+		}
 	}
-	return nil
 }
 
 func killChilds(c *exec.Cmd, _ syscall.Signal) error {

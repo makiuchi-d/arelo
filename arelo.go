@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -335,6 +336,7 @@ type bytesErr struct {
 //
 // cmd.Wait() blocks until stdin.Read() returns.
 // so stdinReader.Read() returns EOF when the child process exited.
+// see also: watchChild()
 type stdinReader struct {
 	input <-chan bytesErr
 	done  <-chan struct{}
@@ -445,11 +447,32 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 }
 
 func runCmd(ctx context.Context, cmd []string, sig syscall.Signal, stdinC <-chan bytesErr) error {
-	c := prepareCommand(cmd)
+	withStdin := stdinC != nil
+	c := prepareCommand(cmd, withStdin)
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
-	if err := startCommand(c, stdinC); err != nil {
+	childctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	if withStdin {
+		c.Stdin = bufio.NewReader(&stdinReader{
+			input: stdinC,
+			done:  childctx.Done(),
+		})
+	}
+	if err := c.Start(); err != nil {
 		return err
+	}
+
+	var werrC chan error
+	if withStdin {
+		werrC = make(chan error, 1)
+		go func() {
+			err := watchChild(ctx, c)
+			cancel()
+			if err != nil {
+				werrC <- xerrors.Errorf("watchChild: %w", err)
+			}
+		}()
 	}
 
 	var cerr error
@@ -461,14 +484,16 @@ func runCmd(ctx context.Context, cmd []string, sig syscall.Signal, stdinC <-chan
 
 	select {
 	case <-done:
-		if cerr != nil {
-			cerr = xerrors.Errorf("process exit: %w", cerr)
-		}
 		return cerr
+	case err := <-werrC:
+		log.Printf("[ARELO] %v", err)
+		// kill childs
 	case <-ctx.Done():
-		if err := killChilds(c, sig); err != nil {
-			return xerrors.Errorf("kill childs: %w", err)
-		}
+		// kill childs
+	}
+
+	if err := killChilds(c, sig); err != nil {
+		return xerrors.Errorf("kill childs: %w", err)
 	}
 
 	select {
