@@ -3,12 +3,16 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
 	"strings"
 	"syscall"
+
+	"golang.org/x/xerrors"
 )
 
 func parseSignalOption(str string) (os.Signal, string) {
@@ -34,14 +38,16 @@ func parseSignalOption(str string) (os.Signal, string) {
 	return nil, fmt.Sprintf("unspported signal: %s", str)
 }
 
-// makeChildDoneChan returns a chan that notifies the child process has exited.
+var sigchldC <-chan struct{}
+
+// makeSigchldChan returns a chan that notifies SIGCHLD.
 //
-// On UNIX like OS, it is notified by SIGCHLD.
-func makeChildDoneChan() <-chan struct{} {
+// On UNIX like OS, termination of child process is notified by SIGCHLD.
+func makeSigchldChan() <-chan struct{} {
 	c := make(chan struct{}, 1)
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGCHLD)
 	go func() {
-		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, syscall.SIGCHLD)
 		for {
 			<-sig
 			select {
@@ -53,14 +59,48 @@ func makeChildDoneChan() <-chan struct{} {
 	return c
 }
 
-func prepareCommand(cmd []string) *exec.Cmd {
+func clearChBuf[T any](c <-chan T) {
+	for {
+		select {
+		case <-c:
+		default:
+			return
+		}
+	}
+}
+
+func prepareCommand(cmd []string, withstdin bool) *exec.Cmd {
+	if withstdin {
+		if sigchldC == nil {
+			sigchldC = makeSigchldChan()
+		} else {
+			clearChBuf(sigchldC)
+		}
+	}
 	c := exec.Command(cmd[0], cmd[1:]...)
 	c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	return c
 }
 
-func waitCmd(cmd *exec.Cmd) error {
-	return cmd.Wait()
+// watchChild detects the termination of the child process by using SIGCHLD and the wait4 syscall.
+func watchChild(ctx context.Context, c *exec.Cmd) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-sigchldC:
+		}
+
+		var wstatus syscall.WaitStatus
+		var rusage syscall.Rusage
+		pid, err := syscall.Wait4(c.Process.Pid, &wstatus, syscall.WNOHANG, &rusage)
+		if errors.Is(err, syscall.ECHILD) || (pid == c.Process.Pid && wstatus.Exited()) {
+			return nil
+		}
+		if err != nil {
+			return xerrors.Errorf("syscall.Wait4: %w", err)
+		}
+	}
 }
 
 func killChilds(c *exec.Cmd, sig syscall.Signal) error {

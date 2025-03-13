@@ -55,6 +55,7 @@ Options:
   -f, --filter event       filter file system event (CREATE|WRITE|REMOVE|RENAME|CHMOD)
   -h, --help               display this message
   -i, --ignore glob        ignore pathname glob pattern
+  -n, --no-stdin           do not forward stdin to the command
   -p, --pattern glob       trigger pathname glob pattern (default "**")
       --polling interval   poll files at given interval instead of using fsnotify
   -r, --restart            restart the command on exit

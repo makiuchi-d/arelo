@@ -3,7 +3,7 @@
 package main
 
 import (
-	"log"
+	"context"
 	"os"
 	"os/exec"
 	"strconv"
@@ -25,58 +25,43 @@ func parseSignalOption(str string) (os.Signal, string) {
 	return nil, "Signal option (--signal, -s) is not available on Windows."
 }
 
-// makeChildDoneChan returns a chan that notifies the child process has exited.
-//
-// On Windows, poll until GetExitCodeProcess() returns anything other than STILL_ACTIVE.
-func makeChildDoneChan() <-chan struct{} {
-	c := make(chan struct{}, 1)
-	procC = make(chan windows.Handle)
-	go func() {
-		for {
-			p := <-procC
-			for {
-				time.Sleep(*delay / 2)
-				var code uint32
-				err := windows.GetExitCodeProcess(p, &code)
-				if err != nil {
-					log.Printf("GetExitCodeProcess: %v", err)
-					select {
-					case c <- struct{}{}:
-					default:
-					}
-					break
-				}
-				if code != STILL_ACTIVE {
-					select {
-					case c <- struct{}{}:
-					default:
-					}
-					break
-				}
-			}
-			windows.CloseHandle(p)
-		}
-	}()
+func prepareCommand(cmd []string, _ bool) *exec.Cmd {
+	c := exec.Command(cmd[0], cmd[1:]...)
+	c.SysProcAttr = &syscall.SysProcAttr{
+		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP,
+	}
 	return c
 }
 
-func waitCmd(cmd *exec.Cmd) error {
-	p, err := windows.OpenProcess(
-		windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(cmd.Process.Pid))
+// watchChild detects the termination of the child process by polling GetExitCodeProcess.
+func watchChild(ctx context.Context, c *exec.Cmd) error {
+	p, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(c.Process.Pid))
 	if err != nil {
 		return xerrors.Errorf("OpenProcess: %w", err)
 	}
-	procC <- p
-	return cmd.Wait()
+	defer windows.CloseHandle(p)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(*delay / 2):
+		}
+
+		var code uint32
+		err := windows.GetExitCodeProcess(p, &code)
+		if err != nil {
+			return xerrors.Errorf("GetExitCodeProcess: %w", err)
+		}
+		if code != STILL_ACTIVE {
+			return nil
+		}
+	}
 }
 
-func prepareCommand(cmd []string) *exec.Cmd {
-	return exec.Command(cmd[0], cmd[1:]...)
-}
-
-func killChilds(c *exec.Cmd, sig syscall.Signal) error {
+func killChilds(c *exec.Cmd, _ syscall.Signal) error {
 	kill := exec.Command("TASKKILL", "/T", "/F", "/PID", strconv.Itoa(c.Process.Pid))
 	kill.Stderr = c.Stderr
-	kill.Stdout = c.Stdout
+	kill.Stdout = c.Stderr
 	return kill.Run()
 }

@@ -41,6 +41,7 @@ Options:
 	delay    = pflag.DurationP("delay", "d", time.Second, "`duration` to delay the restart of the command")
 	restart  = pflag.BoolP("restart", "r", false, "restart the command on exit")
 	sigopt   = pflag.StringP("signal", "s", "", "`signal` used to stop the command (default \"SIGTERM\")")
+	nostdin  = pflag.BoolP("no-stdin", "n", false, "do not forward stdin to the command")
 	verbose  = pflag.BoolP("verbose", "v", false, "verbose output")
 	help     = pflag.BoolP("help", "h", false, "display this message")
 	showver  = pflag.BoolP("version", "V", false, "display version")
@@ -105,7 +106,7 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
-	reload := runner(ctx, &wg, cmd, *delay, sig.(syscall.Signal), *restart)
+	reload := runner(ctx, &wg, cmd, *delay, sig.(syscall.Signal), *restart, *nostdin)
 
 	go func() {
 		for {
@@ -335,9 +336,10 @@ type bytesErr struct {
 //
 // cmd.Wait() blocks until stdin.Read() returns.
 // so stdinReader.Read() returns EOF when the child process exited.
+// see also: watchChild()
 type stdinReader struct {
-	input    <-chan bytesErr
-	chldDone <-chan struct{}
+	input <-chan bytesErr
+	done  <-chan struct{}
 }
 
 func (s *stdinReader) Read(b []byte) (int, error) {
@@ -347,22 +349,12 @@ func (s *stdinReader) Read(b []byte) (int, error) {
 			return 0, io.EOF
 		}
 		return copy(b, be.bytes), be.err
-	case <-s.chldDone:
+	case <-s.done:
 		return 0, io.EOF
 	}
 }
 
-func clearChBuf[T any](c <-chan T) {
-	for {
-		select {
-		case <-c:
-		default:
-			return
-		}
-	}
-}
-
-func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Duration, sig syscall.Signal, autorestart bool) chan<- string {
+func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Duration, sig syscall.Signal, autorestart, nostdin bool) chan<- string {
 	reload := make(chan string)
 	trigger := make(chan string)
 
@@ -385,18 +377,19 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 	}
 	pcmd = pcmd[1:]
 
-	stdinC := make(chan bytesErr, 1)
-	go func() {
-		b1 := make([]byte, 255)
-		b2 := make([]byte, 255)
-		for {
-			n, err := os.Stdin.Read(b1)
-			stdinC <- bytesErr{b1[:n], err}
-			b1, b2 = b2, b1
-		}
-	}()
-
-	chldDone := makeChildDoneChan()
+	var stdinC chan bytesErr
+	if !nostdin {
+		stdinC = make(chan bytesErr)
+		go func() {
+			b1 := make([]byte, 255)
+			b2 := make([]byte, 255)
+			for {
+				n, err := os.Stdin.Read(b1)
+				stdinC <- bytesErr{b1[:n], err}
+				b1, b2 = b2, b1
+			}
+		}()
+	}
 
 	wg.Add(1)
 	go func() {
@@ -413,9 +406,7 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 
 			go func() {
 				log.Printf("[ARELO] start: %s", pcmd)
-				clearChBuf(chldDone)
-				stdin := &stdinReader{stdinC, chldDone}
-				err := runCmd(cmdctx, cmd, sig, stdin)
+				err := runCmd(cmdctx, cmd, sig, stdinC)
 				if err != nil {
 					log.Printf("[ARELO] command error: %v", err)
 				} else {
@@ -455,32 +446,54 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 	return reload
 }
 
-func runCmd(ctx context.Context, cmd []string, sig syscall.Signal, stdin *stdinReader) error {
-	c := prepareCommand(cmd)
-	c.Stdin = bufio.NewReader(stdin)
+func runCmd(ctx context.Context, cmd []string, sig syscall.Signal, stdinC <-chan bytesErr) error {
+	withStdin := stdinC != nil
+	c := prepareCommand(cmd, withStdin)
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
+	childctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	if withStdin {
+		c.Stdin = bufio.NewReader(&stdinReader{
+			input: stdinC,
+			done:  childctx.Done(),
+		})
+	}
 	if err := c.Start(); err != nil {
 		return err
+	}
+
+	var werrC chan error
+	if withStdin {
+		werrC = make(chan error, 1)
+		go func() {
+			err := watchChild(ctx, c)
+			cancel()
+			if err != nil {
+				werrC <- xerrors.Errorf("watchChild: %w", err)
+			}
+		}()
 	}
 
 	var cerr error
 	done := make(chan struct{})
 	go func() {
-		cerr = waitCmd(c)
+		cerr = c.Wait()
 		close(done)
 	}()
 
 	select {
 	case <-done:
-		if cerr != nil {
-			cerr = xerrors.Errorf("process exit: %w", cerr)
-		}
 		return cerr
+	case err := <-werrC:
+		log.Printf("[ARELO] %v", err)
+		// kill childs
 	case <-ctx.Done():
-		if err := killChilds(c, sig); err != nil {
-			return xerrors.Errorf("kill childs: %w", err)
-		}
+		// kill childs
+	}
+
+	if err := killChilds(c, sig); err != nil {
+		return xerrors.Errorf("kill childs: %w", err)
 	}
 
 	select {
