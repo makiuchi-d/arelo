@@ -61,7 +61,9 @@ func watchChild(ctx context.Context, c *exec.Cmd) error {
 
 func killChilds(c *exec.Cmd, _ syscall.Signal) error {
 	kill := exec.Command("TASKKILL", "/T", "/F", "/PID", strconv.Itoa(c.Process.Pid))
-	kill.Stderr = c.Stderr
-	kill.Stdout = c.Stderr
+	if *verbose {
+		kill.Stderr = c.Stderr
+		kill.Stdout = c.Stderr
+	}
 	return kill.Run()
 }

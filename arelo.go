@@ -11,10 +11,12 @@ import (
 	"path"
 	"path/filepath"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
+	"unicode"
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/fsnotify/fsnotify"
@@ -33,8 +35,7 @@ var (
 	usage   = `Usage: arelo [OPTION]... -- COMMAND
 Run the COMMAND and restart when a file matches the pattern has been modified.
 
-Options:
-`
+Options:`
 	targets  = pflag.StringArrayP("target", "t", nil, "observation target `path` (default \"./\")")
 	patterns = pflag.StringArrayP("pattern", "p", nil, "trigger pathname `glob` pattern (default \"**\")")
 	ignores  = pflag.StringArrayP("ignore", "i", nil, "ignore pathname `glob` pattern")
@@ -51,6 +52,12 @@ Options:
 
 func main() {
 	pflag.Parse()
+	if *help {
+		fmt.Println("arelo version", versionstr())
+		fmt.Println(usage)
+		pflag.PrintDefaults()
+		return
+	}
 	if *showver {
 		fmt.Println("arelo version", versionstr())
 		return
@@ -77,17 +84,11 @@ func main() {
 	logVerbose("delay:    %v", delay)
 	logVerbose("signal:   %s", sigstr)
 	logVerbose("restart:  %v", *restart)
+	logVerbose("no-stdin: %v", *nostdin)
 	if *polling != 0 {
 		logVerbose("polling:  true (%v)", *polling)
 	} else {
 		logVerbose("polling:  false")
-	}
-
-	if *help {
-		fmt.Println("arelo version", versionstr())
-		fmt.Fprintf(os.Stderr, usage)
-		pflag.PrintDefaults()
-		return
 	}
 
 	if len(cmd) == 0 {
@@ -370,8 +371,8 @@ func runner(ctx context.Context, wg *sync.WaitGroup, cmd []string, delay time.Du
 
 	var pcmd string // command string for display.
 	for _, s := range cmd {
-		if strings.ContainsAny(s, " \t\"'") {
-			s = fmt.Sprintf("%q", s)
+		if strings.ContainsFunc(s, unicode.IsSpace) {
+			s = strconv.Quote(s)
 		}
 		pcmd += " " + s
 	}
