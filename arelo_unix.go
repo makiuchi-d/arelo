@@ -38,26 +38,7 @@ func parseSignalOption(str string) (os.Signal, string) {
 	return nil, fmt.Sprintf("unspported signal: %s", str)
 }
 
-var sigchldC <-chan struct{}
-
-// makeSigchldChan returns a chan that notifies SIGCHLD.
-//
-// On UNIX like OS, termination of child process is notified by SIGCHLD.
-func makeSigchldChan() <-chan struct{} {
-	c := make(chan struct{}, 1)
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGCHLD)
-	go func() {
-		for {
-			<-sig
-			select {
-			case c <- struct{}{}:
-			default:
-			}
-		}
-	}()
-	return c
-}
+var sigchldC chan os.Signal
 
 func clearChBuf[T any](c <-chan T) {
 	for {
@@ -71,8 +52,10 @@ func clearChBuf[T any](c <-chan T) {
 
 func prepareCommand(cmd []string, withstdin bool) *exec.Cmd {
 	if withstdin {
+		// On UNIX like OS, termination of child process is notified by SIGCHLD.
 		if sigchldC == nil {
-			sigchldC = makeSigchldChan()
+			sigchldC = make(chan os.Signal, 1)
+			signal.Notify(sigchldC, syscall.SIGCHLD)
 		} else {
 			clearChBuf(sigchldC)
 		}
