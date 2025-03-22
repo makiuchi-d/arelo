@@ -76,8 +76,8 @@ func (p *Poller) Add(name string) error {
 		} else {
 			p.pollingFile(ctx, name, fi, ready)
 		}
-		_ = p.Remove(name)
 		cancel()
+		_ = p.Remove(name)
 	}()
 
 	select {
