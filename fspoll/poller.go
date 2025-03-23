@@ -76,7 +76,7 @@ func (p *Poller) Add(name string) error {
 		} else {
 			p.pollingFile(ctx, name, fi, ready)
 		}
-		cancel()
+		cancel() // to prevent deadlock: ready might not be closed
 		_ = p.Remove(name)
 	}()
 
