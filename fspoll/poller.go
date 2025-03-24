@@ -325,6 +325,7 @@ func (p *Poller) pollingFile(ctx context.Context, name string, fi fs.FileInfo, r
 			if !p.sendError(ctx, err) {
 				return
 			}
+			continue
 		}
 
 		if m := fi.Mode(); m != mode {
