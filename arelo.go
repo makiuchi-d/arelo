@@ -287,10 +287,11 @@ func addTargets(w fspoll.Watcher, targets, patterns, ignores []string) error {
 			if err := addDirRecursive(w, t, patterns, ignores, nil); err != nil {
 				return err
 			}
-		}
-		logVerbose("watching target: %q", t)
-		if err := w.Add(t); err != nil {
-			return err
+		} else {
+			logVerbose("watching target: %q", t)
+			if err := w.Add(t); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
